@@ -403,11 +403,26 @@ private:
 	}
 
 	void onCommand(const Ctrl::Command command){
+		// proximity sensor filter from the controller's Settings screen
+		switch(command){
+			case Ctrl::SensorsAllOn:    setSensors(true, true); return;
+			case Ctrl::SensorsFrontOff: setSensors(false, true); return;
+			case Ctrl::SensorsFloorOff: setSensors(true, false); return;
+			case Ctrl::SensorsAllOff:   setSensors(false, false); return;
+			default: break;
+		}
+
 		if(command != Ctrl::ShutUp){
 			return;
 		}
 
 		toggleMute();
+	}
+
+	void setSensors(bool front, bool floor){
+		if(BaseBoard* baseBoard = getService<BaseBoard>()){
+			baseBoard->setProximityEnabled(front, floor);
+		}
 	}
 
 	void toggleMute(){

@@ -1,6 +1,7 @@
 #ifndef BUTTERBOT_FIRMWARE_BASEBOARD_H
 #define BUTTERBOT_FIRMWARE_BASEBOARD_H
 
+#include <atomic>
 #include "Devices/Timer.h"
 #include "Entity/AsyncEntity.h"
 #include "Event/EventBroadcaster.h"
@@ -46,6 +47,12 @@ public:
 	 * Results will be returned in the following "onProximityReading" event broadcast.
 	 */
 	void requestProximityState();
+
+	/**
+	 * Ignore a proximity sensor. A disabled front sensor always reads "no obstacle",
+	 * a disabled bottom sensor always reads "on the ground". Applies to every routine and to lift detection.
+	 */
+	void setProximityEnabled(bool front, bool bottom);
 
 	ChargingState getChargingState();
 
@@ -136,6 +143,10 @@ private:
 		// uint16_t proximityFrontThreshold = 0;   // removed — absolute thresholds superseded
 		// uint16_t proximityBottomThreshold = 0;  // removed — absolute thresholds superseded
 	} registerState;
+
+	// proximity sensor filter, see setProximityEnabled()
+	std::atomic<bool> proxFrontEnabled{ true };
+	std::atomic<bool> proxBottomEnabled{ true };
 
 	/**
 	 * Needed for synchronization of registerState access from public methods and internal thread.
