@@ -27,6 +27,7 @@
 #include "Audio/MicInput.h"
 #include "Pins.hpp"
 #include "Util/HardwareConfiguration.h"
+#include "Util/Roaming.h"
 #include "EventBag.h"
 #include "Event/EventBroadcaster.h"
 #include "src/Services/Time.h"
@@ -409,6 +410,8 @@ private:
 			case Ctrl::SensorsFrontOff: setSensors(false, true); return;
 			case Ctrl::SensorsFloorOff: setSensors(true, false); return;
 			case Ctrl::SensorsAllOff:   setSensors(false, false); return;
+			case Ctrl::RoamingOn:       Roaming::enabled = true; return;
+			case Ctrl::RoamingOff:      Roaming::enabled = false; return;
 			default: break;
 		}
 

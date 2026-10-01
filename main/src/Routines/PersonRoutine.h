@@ -35,6 +35,7 @@ private:
 	enum class Phase : uint8_t { Init, ProxCheck, Scanning, Rotating, Centering, Driving };
 
 	static constexpr uint32_t ScanWindowMs = 700; // ~4 detection frames at ~150ms per frame
+	static constexpr uint32_t StationaryScanWindowMs = 1500; // roaming off: one longer look ahead instead of turning
 	static constexpr uint32_t Rotate45Ms = 1000; // VoiceTurn180 is 4000ms at full speed, so 45 is ~1000ms
 	static constexpr uint8_t MaxRotations = 8; // 8 x 45 = full 360
 	static constexpr int8_t RotateSpeed = 100;

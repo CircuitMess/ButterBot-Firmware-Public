@@ -7,7 +7,9 @@ struct Ctrl {
 	enum Command {
 		EnterRC, ExitRC, Listen, Summon, ShutUp, Poke, Drive, RCSound, Scenario,
 		// Proximity sensor filter (appended to keep existing values stable)
-		SensorsAllOn, SensorsFrontOff, SensorsFloorOff, SensorsAllOff
+		SensorsAllOn, SensorsFrontOff, SensorsFloorOff, SensorsAllOff,
+		// Idle roaming (wandering, turning and driving to faces) on / off
+		RoamingOn, RoamingOff
 	} type;
 };
 

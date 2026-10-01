@@ -23,6 +23,7 @@
 #include "Routines/EventRoutines/GasConfiguredEventRoutine.h"
 #include "Routines/EventRoutines/SummonEventRoutine.h"
 #include "Routines/WanderRoutine.h"
+#include "Util/Roaming.h"
 
 DEFINE_LOG(IdleState)
 
@@ -226,20 +227,26 @@ void IdleState::maybeStartRandomRoutine(){
 }
 
 RoutineFactory IdleState::pickRandomRoutine() const{
+	// With roaming off the robot doesn't wander (PersonRoutine stays, it just doesn't move)
+	const auto weightOf = [](const RandomRoutineDef& def) -> size_t {
+		if(def.routine == &makeRoutine<WanderRoutine> && !Roaming::enabled) return 0;
+		return def.weight;
+	};
+
 	size_t weightSum = 0;
 	for(const RandomRoutineDef& routineDef : RandomRoutines){
-		weightSum += routineDef.weight;
+		weightSum += weightOf(routineDef);
 	}
 
 	const size_t random = rand() % (weightSum + 1);
 
 	size_t sum = 0;
 	for(const RandomRoutineDef& routineDef : RandomRoutines){
-		if(routineDef.weight == 0){
+		if(weightOf(routineDef) == 0){
 			continue;
 		}
 
-		sum += routineDef.weight;
+		sum += weightOf(routineDef);
 
 		if(random <= sum){
 			return routineDef.routine;
