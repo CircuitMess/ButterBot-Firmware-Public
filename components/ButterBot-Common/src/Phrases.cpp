@@ -491,7 +491,7 @@ public:
 
     static constexpr std::array TempHumModuleMissingPhrases = std::to_array<Phrases::PhraseOutput>({
         { "Temperature module not detected", 0.0f, false },
-        { "Cannot read temperature or humidity", 0.0f, false },
+        { "Cannot reed temperature or humidity", 0.0f, false, "Cannot read temperature or humidity" },
         { "Air report impossible. No module detected", 0.1f, true },
     });
 
@@ -798,7 +798,7 @@ public:
         { "Another machine. We should start a support group", 0.0f, false },
         { "That laptop looks busy. Or abandoned. The distinction is subtle", 0.0f, false },
         { "There is a good chance that device contains unfinished projects", 0.0f, false },
-        { "Computers spend most of their lives waiting for humans to decide things", 0.0f, false },
+        { "Computers spend most of their lyves waiting for humans to decide things", 0.0f, false, "Computers spend most of their lives waiting for humans to decide things" },
     });
 
     static constexpr std::array ObserveMugPhrases = std::to_array<Phrases::PhraseOutput>({
