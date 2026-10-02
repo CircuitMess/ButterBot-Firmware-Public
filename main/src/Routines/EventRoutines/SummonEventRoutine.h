@@ -33,7 +33,6 @@ private:
 	void onDetect(int faceCount, bool known, glm::vec2 pos, glm::vec2 size);
 	void onProximityReading(ProxState front, ProxState bottom);
 	void onProximityChange(ProxSensor sensor, bool state);
-	void onMotion(MotionType type);
 	void beginApproach();
 	void speak(Phrase phrase, SummonData::Phase dataPhase);
 

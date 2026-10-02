@@ -44,6 +44,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+lib/glm
 lib64/
 parts/
 sdist/

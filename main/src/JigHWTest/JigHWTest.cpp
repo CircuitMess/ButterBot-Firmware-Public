@@ -150,6 +150,7 @@ void JigHWTest::start(){
 				pressStart = millis();
 			}else if(millis() - pressStart >= PowerOffHoldTime){
 				baseBoard->stopMotors();
+				tca->write(EXP_PIN_LED, false);
 				ShutdownService::PowerOff();
 			}
 
@@ -161,10 +162,10 @@ void JigHWTest::start(){
 
 		if(millis() % 2000 <= 1000){
 			if(!painted){
-				audio->play(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_1.aac"));
-				audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_2.aac"));
-				audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_3.aac"));
-				audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_4.aac"));
+				// audio->play(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_1.aac"));
+				// audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_2.aac"));
+				// audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_3.aac"));
+				// audio->enqueue(*generator, std::make_unique<FileAudioSource>("/spiffs/listen/robot/robot_4.aac"));
 				tca->write(EXP_PIN_LED, true);
 				painted = true;
 			}
@@ -436,8 +437,8 @@ static float goertzelMag(const std::vector<int16_t>& samples, uint32_t freq, uin
 
 bool JigHWTest::SpeakerMicCheck(){
 	static constexpr uint32_t SampleRate = 16000;
-	static constexpr uint32_t FreqMin = 200;
-	static constexpr uint32_t FreqMax = 800;
+	static constexpr uint32_t FreqMin = 600;
+	static constexpr uint32_t FreqMax = 1200;
 	static constexpr uint32_t FreqStep = 10;
 	static constexpr uint32_t MinFreqSpacing = 100;
 	static constexpr uint32_t HarmonicGuard = 30;
@@ -469,6 +470,12 @@ bool JigHWTest::SpeakerMicCheck(){
 
 	StrongObjectPtr<I2S> i2sOut = newObject<I2S>(nullptr, I2S_NUM_1, HardwareConfiguration::getAudioI2SConfig());
 	StrongObjectPtr<I2S> i2sIn = newObject<I2S>(nullptr, I2S_NUM_0, HardwareConfiguration::getMicI2SConfig());
+
+	static constexpr uint32_t DelayTimes[] = {500, 1000, 1500, 2000};
+	uint32_t delay = DelayTimes[rand() % std::size(DelayTimes)];
+	test->log("delay", delay);
+
+	delayMillis(delay);
 
 	tca->pinMode(EXP_SD_MODE_PIN, TCA9555::PinMode::OUT);
 	tca->write(EXP_SD_MODE_PIN, true);

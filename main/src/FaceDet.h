@@ -70,6 +70,13 @@ private:
 	static constexpr EventBits_t RunBit = BIT0;
 	static constexpr EventBits_t AtGateBit = BIT1;
 
+	/**
+	 * True only when the detection thread is actually parked at its gate (AtGateBit set and RunBit
+	 * clear). This, not isStarted(), is the condition under which the models may be touched from
+	 * another thread: isStarted() only reflects the request, the thread may still be mid-inference.
+	 */
+	bool isParked() const;
+
 	void threadFunc();
 	void detectionProcess(const dl::image::img_t& img);
 

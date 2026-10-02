@@ -1,10 +1,12 @@
 #include "BaseBoard.h"
 #include "driver/gpio.h"
 #include "Pins.hpp"
+#include <Util/stdafx.h>
 
 DEFINE_LOG(BaseBoard)
 
 SemaphoreHandle_t BaseBoard::sem;
+std::atomic<bool> BaseBoard::proxRebaselineDue{ false };
 
 BaseBoard::BaseBoard(std::unique_ptr<I2CDevice> device, bool internalStack) : AsyncEntity(0, 3 * 1024, 7, -1, internalStack), dev(std::move(device)){
 	CMF_LOG(BaseBoard, LogLevel::Info, "Initializing BaseBoard");
@@ -26,6 +28,7 @@ BaseBoard::BaseBoard(std::unique_ptr<I2CDevice> device, bool internalStack) : As
 
 	sem = xSemaphoreCreateBinary();
 	motorTimer = newObject<Timer>(this, MotorControlPeriod, timerFunc, nullptr, "baseBoard");
+	proxTimer = newObject<Timer>(this, ProxRebaselineDelayMs, proxTimerFunc, nullptr, "baseBoardProx");
 
 	reset();
 
@@ -49,11 +52,21 @@ void BaseBoard::setMotors(int8_t left, int8_t right){
 	regStateMutex.lock();
 	registerState.motorLeft = left;
 	registerState.motorRight = right;
+	const bool scanning = registerState.proximityScanning;
 	regStateMutex.unlock();
+
+	if(scanning){
+		ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, static_cast<uint8_t>(0)));
+		delayMillis(ProxStopSettleMs);
+	}
 
 	//Writing to both registers sequentially
 	int8_t arr[] = { left, right };
 	ESP_ERROR_CHECK(dev->writeRegister(MotorL, (uint8_t*)&arr, 2));
+
+	if(scanning){
+		proxTimer->reset();
+	}
 
 	updateMotorTimer();
 }
@@ -66,9 +79,19 @@ void BaseBoard::setMotorLeft(int8_t value){
 
 	regStateMutex.lock();
 	registerState.motorLeft = value;
+	const bool scanning = registerState.proximityScanning;
 	regStateMutex.unlock();
 
+	if(scanning){
+		ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, static_cast<uint8_t>(0)));
+		delayMillis(ProxStopSettleMs);
+	}
+
 	ESP_ERROR_CHECK(dev->writeRegister(MotorL, (uint8_t*)&value, 1));
+
+	if(scanning){
+		proxTimer->reset();
+	}
 
 	updateMotorTimer();
 }
@@ -81,9 +104,19 @@ void BaseBoard::setMotorRight(int8_t value){
 
 	regStateMutex.lock();
 	registerState.motorRight = value;
+	const bool scanning = registerState.proximityScanning;
 	regStateMutex.unlock();
 
+	if(scanning){
+		ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, static_cast<uint8_t>(0)));
+		delayMillis(ProxStopSettleMs);
+	}
+
 	ESP_ERROR_CHECK(dev->writeRegister(MotorR, (uint8_t*)&value, 1));
+
+	if(scanning){
+		proxTimer->reset();
+	}
 
 	updateMotorTimer();
 }
@@ -93,10 +126,30 @@ void BaseBoard::stopMotors(){
 }
 
 void BaseBoard::setProximityScanning(bool enabled){
-	if(enabled == registerState.proximityScanning) return;
-
+	regStateMutex.lock();
+	const bool changed = enabled != registerState.proximityScanning;
 	registerState.proximityScanning = enabled;
+	regStateMutex.unlock();
+
+	if(!changed){
+		return;
+	}
+
 	ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, (uint8_t*)&enabled, 1));
+}
+
+void BaseBoard::rebaselineProximity(){
+	regStateMutex.lock();
+	const bool scanning = registerState.proximityScanning;
+	regStateMutex.unlock();
+
+	if(!scanning){
+		return;
+	}
+
+	ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, static_cast<uint8_t>(0)));
+	delayMillis(ProxStopSettleMs);
+	ESP_ERROR_CHECK(dev->writeRegister(ProximityScanning, static_cast<uint8_t>(1)));
 }
 
 // Absolute threshold I2C commands removed — Base uses relative band logic now
@@ -143,6 +196,10 @@ void BaseBoard::tick(float deltaTime) noexcept{
 		updateMotorTimer();
 	}
 	regStateMutex.unlock();
+
+	if(proxRebaselineDue.exchange(false)){
+		rebaselineProximity();
+	}
 
 	if(gpio_get_level((gpio_num_t)MOTOR_BRD_INT) == 0){
 		//No events to process
@@ -199,6 +256,11 @@ uint8_t BaseBoard::getEventCount(){
 }
 
 void BaseBoard::timerFunc(void*){
+	xSemaphoreGive(sem);
+}
+
+void BaseBoard::proxTimerFunc(void*){
+	proxRebaselineDue = true;
 	xSemaphoreGive(sem);
 }
 

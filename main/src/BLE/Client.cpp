@@ -1,6 +1,8 @@
 #include "Client.h"
 #include "GAP.h"
+#include "Bonds.h"
 #include <cstring>
+#include <esp_mac.h>
 #include <esp_gap_ble_api.h>
 #include <Log/Log.h>
 
@@ -63,14 +65,20 @@ void BLE::Client::ble_GATTC_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_i
 			return;
 		}
 	}else if(event == ESP_GATTC_CONNECT_EVT){
-		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_CONNECT_EVT");
+		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_CONNECT_EVT conn %d addr " MACSTR " type %d role %d", param->connect.conn_id, MAC2STR(param->connect.remote_bda), param->connect.ble_addr_type, param->connect.link_role);
 		onConnect(&param->connect);
 	}else if(event == ESP_GATTC_OPEN_EVT){
 		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_OPEN_EVT");
 		onOpen(&param->open);
+	}else if(event == ESP_GATTC_DIS_SRVC_CMPL_EVT){
+		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_DIS_SRVC_CMPL_EVT");
+		onDiscoveryComplete(&param->dis_srvc_cmpl);
 	}else if(event == ESP_GATTC_CFG_MTU_EVT){
 		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_CFG_MTU_EVT");
 		onMtuResp(&param->cfg_mtu);
+	}else if(event == ESP_GATTC_SRVC_CHG_EVT){
+		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_SRVC_CHG_EVT");
+		onServiceChanged(&param->srvc_chg);
 	}else if(event == ESP_GATTC_SEARCH_RES_EVT){
 		CMF_LOG(BLE_Client, LogLevel::Info,"ESP_GATTC_SEARCH_RES_EVT");
 		onSearchResult(&param->search_res);
@@ -98,103 +106,334 @@ void BLE::Client::ble_GATTC_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_i
 	}
 }
 
-void BLE::Client::onConnect(const esp_ble_gattc_cb_param_t::gattc_connect_evt_param* param){
-	memcpy(con.addr, param->remote_bda, 6);
+BLE::Client::Link* BLE::Client::findLinkByConn(uint16_t connId){
+	for(Link& link : links){
+		if(link.used && link.connId == connId){
+			return &link;
+		}
+	}
 
-	// Capture the conn_id now so onPairDone() has a valid handle even if the
-	// AUTH_CMPL event arrives before ESP_GATTC_OPEN_EVT (see maybeStartDiscovery).
-	con.hndl = param->conn_id;
-	con.opened = false;
-	con.paired = false;
-	con.discovering = false;
-
-	// Server notifies ConMan, which in turn sets connection parameters
-
-	// Open the GATT client connection immediately so a control block (clcb) exists
-	// from link-up. A bonded iPhone re-uses its persisted ANCS CCCD subscriptions
-	// and starts pushing notifications as soon as the link encrypts; if the open
-	// is deferred until after pairing, those notifications arrive before the clcb
-	// exists and bluedroid drops them ("indication/notif for unknown device,
-	// ignore"). The ACL already exists here, so this only creates the virtual GATT
-	// connection. Encryption is started from onOpen, once the clcb is in place.
-	esp_ble_gattc_open(iface.hndl, con.addr, BLE_ADDR_TYPE_PUBLIC, true);
+	return nullptr;
 }
 
-void BLE::Client::onPairDone(){
-	// Link is now encrypted. Discovery proceeds once the connection is also open.
-	con.paired = true;
-	maybeStartDiscovery();
+BLE::Client::Link* BLE::Client::findLinkByAddr(const esp_bd_addr_t addr){
+	for(Link& link : links){
+		if(link.used && memcmp(link.addr, addr, ESP_BD_ADDR_LEN) == 0){
+			return &link;
+		}
+	}
+
+	return nullptr;
+}
+
+BLE::Client::Link* BLE::Client::allocLink(){
+	for(Link& link : links){
+		if(!link.used){
+			link = Link{};
+			link.used = true;
+			return &link;
+		}
+	}
+
+	return nullptr;
+}
+
+void BLE::Client::requestSecurity(Link& link){
+	link.securityRequested = true;
+
+	const esp_err_t err = esp_ble_set_encryption(link.addr, ESP_BLE_SEC_ENCRYPT_MITM);
+	if(err != ESP_OK){
+		CMF_LOG(BLE_Client, LogLevel::Warning, "esp_ble_set_encryption failed: 0x%x", err);
+		link.securityRequested = false;
+	}
+}
+
+void BLE::Client::onConnect(const esp_ble_gattc_cb_param_t::gattc_connect_evt_param* param){
+	if(findLinkByConn(param->conn_id) != nullptr){
+		return;
+	}
+
+	Link* link = allocLink();
+	if(link == nullptr){
+		CMF_LOG(BLE_Client, LogLevel::Warning, "connect: capacity exceeded, ignoring conn %d", param->conn_id);
+		return;
+	}
+
+	memcpy(link->addr, param->remote_bda, ESP_BD_ADDR_LEN);
+	link->addrType = param->ble_addr_type;
+	link->connId = param->conn_id;
+	link->bonded = BLE::isBonded(param->remote_bda);
+
+	if(consumePendingAuth(*link)){
+		CMF_LOG(BLE_Client, LogLevel::Info, "link was encrypted before the connect event, resuming");
+		link->paired = true;
+	}
+
+	openLink(*link);
+	maybeStartDiscovery(*link);
+}
+
+void BLE::Client::maybeStartDiscovery(Link& link){
+	if(!link.opened || !link.discovered || link.discoveryStarted){
+		return;
+	}
+
+	link.discoveryStarted = true;
+
+	if(link.mtuDone){
+		searchServices(link);
+		return;
+	}
+
+	const esp_err_t err = esp_ble_gattc_send_mtu_req(iface.hndl, link.connId);
+	if(err != ESP_OK){
+		CMF_LOG(BLE_Client, LogLevel::Warning, "esp_ble_gattc_send_mtu_req failed: 0x%x", err);
+		link.mtuDone = true;
+		searchServices(link);
+	}
+}
+
+void BLE::Client::recordPendingAuth(const esp_bd_addr_t addr){
+	for(PendingAuth& pending : pendingAuths){
+		if(pending.used && memcmp(pending.addr, addr, ESP_BD_ADDR_LEN) == 0){
+			return;
+		}
+	}
+
+	for(PendingAuth& pending : pendingAuths){
+		if(!pending.used){
+			pending.used = true;
+			memcpy(pending.addr, addr, ESP_BD_ADDR_LEN);
+			return;
+		}
+	}
+
+	CMF_LOG(BLE_Client, LogLevel::Warning, "pending auth storage full, dropping");
+}
+
+bool BLE::Client::consumePendingAuth(const Link& link){
+	for(PendingAuth& pending : pendingAuths){
+		if(pending.used && memcmp(pending.addr, link.addr, ESP_BD_ADDR_LEN) == 0){
+			pending = PendingAuth{};
+			return true;
+		}
+	}
+
+	if(!link.bonded){
+		return false;
+	}
+
+	PendingAuth* only = nullptr;
+	size_t count = 0;
+	for(PendingAuth& pending : pendingAuths){
+		if(pending.used){
+			only = &pending;
+			count++;
+		}
+	}
+
+	if(count != 1){
+		return false;
+	}
+
+	*only = PendingAuth{};
+	return true;
+}
+
+void BLE::Client::clearPendingAuth(const esp_bd_addr_t addr){
+	for(PendingAuth& pending : pendingAuths){
+		if(pending.used && memcmp(pending.addr, addr, ESP_BD_ADDR_LEN) == 0){
+			pending = PendingAuth{};
+		}
+	}
+}
+
+void BLE::Client::onPairDone(const esp_bd_addr_t addr){
+	Link* link = findLinkByAddr(addr);
+	if(link == nullptr){
+		Link* unpaired = nullptr;
+		size_t unpairedCount = 0;
+		for(Link& candidate : links){
+			if(candidate.used && !candidate.paired){
+				unpaired = &candidate;
+				unpairedCount++;
+			}
+		}
+
+		if(unpairedCount != 1){
+			CMF_LOG(BLE_Client, LogLevel::Info, "pairing completed before the connect event, remembering it");
+			recordPendingAuth(addr);
+			return;
+		}
+
+		CMF_LOG(BLE_Client, LogLevel::Warning, "pairing completed under an address other than the connect-time one, taking it for the only unpaired link");
+		link = unpaired;
+	}
+
+	link->paired = true;
+	link->bonded = true;
+	link->securityRequested = false;
+
+	pullServices(*link);
+}
+
+void BLE::Client::onPairFailed(const esp_bd_addr_t addr){
+	Link* link = findLinkByAddr(addr);
+	if(link != nullptr){
+		link->securityRequested = false;
+		link->bonded = false;
+	}else{
+		for(Link& candidate : links){
+			candidate.securityRequested = false;
+		}
+	}
+}
+
+void BLE::Client::openLink(Link& link){
+	link.opening = true;
+
+	const esp_err_t err = esp_ble_gattc_open(iface.hndl, link.addr, link.addrType, true);
+	if(err != ESP_OK){
+		CMF_LOG(BLE_Client, LogLevel::Error, "esp_ble_gattc_open failed: 0x%x", err);
+		link.opening = false;
+	}
 }
 
 void BLE::Client::onOpen(const esp_ble_gattc_cb_param_t::gattc_open_evt_param* param){
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		link = findLinkByAddr(param->remote_bda);
+	}
+
+	if(link == nullptr){
+		CMF_LOG(BLE_Client, LogLevel::Warning, "open event for an untracked link, conn %d", param->conn_id);
+		return;
+	}
+
+	link->opening = false;
+
 	if(param->status != ESP_GATT_OK){
 		CMF_LOG(BLE_Client, LogLevel::Error,"open failed, error status = 0x%x", param->status);
 		return;
 	}
 
-	con.hndl = param->conn_id;
-	con.opened = true;
-
-	// Now that the GATT client connection (clcb) exists, start pairing. When it
-	// completes, ESP_GAP_BLE_AUTH_CMPL_EVT fires (handled by BLE) and BLE calls
-	// onPairDone(). Discovery proceeds once the link is also encrypted.
-	esp_ble_set_encryption(con.addr, ESP_BLE_SEC_ENCRYPT_MITM);
-
-	maybeStartDiscovery();
+	link->connId = param->conn_id;
+	link->opened = true;
+	maybeStartDiscovery(*link);
 }
 
-void BLE::Client::maybeStartDiscovery(){
-	// Begin MTU negotiation (then, via onMtuResp, service discovery) only once the
-	// GATT connection is open AND the link is encrypted. ESP_GATTC_OPEN_EVT and
-	// ESP_GAP_BLE_AUTH_CMPL_EVT can arrive in either order — for a bonded iPhone
-	// the controller may auto-encrypt before the open completes — so whichever
-	// finishes last triggers discovery. `discovering` ensures it starts once.
-	if(!con.opened || !con.paired || con.discovering) return;
-	con.discovering = true;
-
-	esp_ble_gattc_send_mtu_req(iface.hndl, con.hndl);
-}
-
-void BLE::Client::onMtuResp(const esp_ble_gattc_cb_param_t::gattc_cfg_mtu_evt_param* param){
-	if(param->status != ESP_GATT_OK){
-		CMF_LOG(BLE_Client, LogLevel::Error,"config mtu failed, error status = 0c%x", param->status);
+void BLE::Client::onDiscoveryComplete(const esp_ble_gattc_cb_param_t::gattc_dis_srvc_cmpl_evt_param* param){
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
 		return;
 	}
 
-	con.MTU_size = param->mtu; // TODO: check if this really sets the MTU on the remote device side
+	if(param->status != ESP_GATT_OK){
+		CMF_LOG(BLE_Client, LogLevel::Error, "service discovery failed, error status = 0x%x", param->status);
+		return;
+	}
 
-	searchServices();
+	link->discovered = true;
+	maybeStartDiscovery(*link);
 }
 
-void BLE::Client::searchServices(){
-	for(const auto& service : services){
-		esp_ble_gattc_search_service(iface.hndl, con.hndl, &service->uuid);
+void BLE::Client::onMtuResp(const esp_ble_gattc_cb_param_t::gattc_cfg_mtu_evt_param* param){
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		return;
+	}
+
+	if(param->status != ESP_GATT_OK){
+		CMF_LOG(BLE_Client, LogLevel::Error,"config mtu failed, error status = 0x%x", param->status);
+	}else{
+		link->MTU_size = param->mtu;
+	}
+
+	if(link->mtuDone){
+		return;
+	}
+
+	link->mtuDone = true;
+
+	if(link->discoveryStarted){
+		searchServices(*link);
+	}
+}
+
+void BLE::Client::onServiceChanged(const esp_ble_gattc_cb_param_t::gattc_srvc_chg_evt_param* param){
+	Link* link = findLinkByAddr(param->remote_bda);
+	if(link == nullptr){
+		return;
+	}
+
+	CMF_LOG(BLE_Client, LogLevel::Info, "remote database changed, dropping services until rediscovery completes");
+	closeServices(*link);
+
+	link->discovered = false;
+	link->discoveryStarted = false;
+}
+
+void BLE::Client::searchServices(Link& link){
+	for(const std::shared_ptr<Service>& service : services){
+		esp_ble_gattc_search_service(iface.hndl, link.connId, &service->uuid);
 	}
 }
 
 void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_res_evt_param* param){
-	for(const auto& service : services){
-		if(param->srvc_id.uuid.len == service->uuid.len && memcmp(param->srvc_id.uuid.uuid.uuid128, service->uuid.uuid.uuid128, service->uuid.len) == 0){
-			service->establish(std::make_unique<ServiceInfo>(this, param->start_handle, param->end_handle));
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		return;
+	}
+
+	for(const std::shared_ptr<Service>& service : services){
+		if(param->srvc_id.uuid.len != service->uuid.len || memcmp(param->srvc_id.uuid.uuid.uuid128, service->uuid.uuid.uuid128, service->uuid.len) != 0){
+			continue;
 		}
+
+		if(service->established()){
+			continue;
+		}
+
+		service->establish(std::make_unique<ServiceInfo>(this, link->connId, link->addr, param->start_handle, param->end_handle));
 	}
 }
 
 void BLE::Client::onSearchComplete(const esp_ble_gattc_cb_param_t::gattc_search_cmpl_evt_param* param){
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		return;
+	}
+
 	if(param->status != ESP_GATT_OK){
 		CMF_LOG(BLE_Client, LogLevel::Error,"search service failed, error status = %x", param->status);
 		return;
 	}
 
-	// TODO: invoke pull on the service which search results belong to
-	// current implementation only works with one service registered, I think
-	for(auto& svc : services){
-		if(!svc->established()) continue;
-		if(svc->populated()) continue;
+	pullServices(*link);
+}
+
+void BLE::Client::pullServices(Link& link){
+	bool waiting = false;
+
+	for(const std::shared_ptr<Service>& svc : services){
+		if(!svc->established() || svc->populated() || svc->svc->getConnId() != link.connId){
+			continue;
+		}
+
+		if(!link.paired){
+			waiting = true;
+			continue;
+		}
+
 		svc->pull();
 	}
 
-	// TODO: disconnect if no registered service is found on remote server
+	if(!waiting || link.paired || link.securityRequested){
+		return;
+	}
+
+	CMF_LOG(BLE_Client, LogLevel::Info, "registered service found on an unencrypted link, requesting security");
+	requestSecurity(link);
 }
 
 void BLE::Client::onClose(const esp_ble_gattc_cb_param_t::gattc_close_evt_param* param){
@@ -203,12 +442,29 @@ void BLE::Client::onClose(const esp_ble_gattc_cb_param_t::gattc_close_evt_param*
 		return;
 	}
 
-	close();
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		return;
+	}
+
+	closeLink(*link);
 }
 
 void BLE::Client::onDisconnect(const esp_ble_gattc_cb_param_t::gattc_disconnect_evt_param* param){
-	CMF_LOG(BLE_Client, LogLevel::Info,"Disconnected. Reason: 0x%x", param->reason);
-	close();
+	CMF_LOG(BLE_Client, LogLevel::Info,"Disconnected. Reason: 0x%x, conn %d addr " MACSTR, param->reason, param->conn_id, MAC2STR(param->remote_bda));
+
+	clearPendingAuth(param->remote_bda);
+
+	Link* link = findLinkByConn(param->conn_id);
+	if(link == nullptr){
+		link = findLinkByAddr(param->remote_bda);
+	}
+
+	if(link == nullptr){
+		return;
+	}
+
+	closeLink(*link);
 }
 
 void BLE::Client::passToChar(esp_gattc_cb_event_t event, esp_ble_gattc_cb_param_t* param){
@@ -234,6 +490,7 @@ void BLE::Client::passToChar(esp_gattc_cb_event_t event, esp_ble_gattc_cb_param_
 		auto chr = chars.find(param->read.handle);
 		check(chr);
 
+		// TODO: lol what is this, turn this into actual read evt handling
 		esp_ble_gattc_cb_param_t::gattc_notify_evt_param notifParam = {
 				.value_len = param->read.value_len,
 				.value = param->read.value,
@@ -253,23 +510,29 @@ void BLE::Client::passToChar(esp_gattc_cb_event_t event, esp_ble_gattc_cb_param_
 	}
 }
 
-void BLE::Client::close(){
-	for(auto& svc : services){
-		if(svc == nullptr) {
+void BLE::Client::closeServices(const Link& link){
+	for(const std::shared_ptr<Service>& svc : services){
+		if(svc == nullptr || !svc->established() || svc->svc->getConnId() != link.connId){
 			continue;
+		}
+
+		for(const std::shared_ptr<Char>& chr : svc->chars){
+			std::unordered_map<uint16_t, Char*>::iterator it = chars.begin();
+			while(it != chars.end()){
+				if(it->second == chr.get()){
+					it = chars.erase(it);
+				}else{
+					++it;
+				}
+			}
 		}
 
 		svc->close();
 	}
-	chars.clear();
+}
 
-	// Reset to the "no connection" sentinel that ConnectionInfo::operator bool
-	// checks (0xffff), not 0 — otherwise a closed connection still reads as valid.
-	con.hndl = 0xffff;
-	con.opened = false;
-	con.paired = false;
-	con.discovering = false;
-	memset(con.addr, 0, 6);
-
-	// Server notifies ConMan, which in turn starts advertising
+void BLE::Client::closeLink(Link& link){
+	closeServices(link);
+	clearPendingAuth(link.addr);
+	link = Link{};
 }

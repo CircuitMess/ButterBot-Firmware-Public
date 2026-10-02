@@ -62,8 +62,14 @@ private:
 
 	//After two seconds of the same candidate (non-shake event), an event will be broadcast.
 	static constexpr uint32_t CandidateHoldTime = 2000;
+	static constexpr float GrossMotionRange = 0.3f;
+	static constexpr float MeanTolerance = 0.02f;
+	static constexpr uint8_t StillBatchCount = 6;
 
 	Pose detectPose(SC7A20::Sample sample);
+	static float maxRange(const std::vector<SC7A20::Sample>& samples);
+	static SC7A20::Sample meanSample(const std::vector<SC7A20::Sample>& samples);
+	static float maxAxisDiff(const SC7A20::Sample& a, const SC7A20::Sample& b);
 
 	Pose lastPose = Pose::Moving;
 

@@ -14,11 +14,16 @@ public:
 	SubHandle addOnDisconnectCb(DisconnectCB cb);
 	void removeOnDisconnectCb(SubHandle handle);
 
+	void setPeerNeverPairs();
+
 private:
 	friend BLE::Server;
 	friend BLE::Server::Char;
 	friend BLE::Server::CharInfo;
 	Service(esp_gatt_srvc_id_t id);
+
+	BLE::Server* server = nullptr;
+	bool peerNeverPairs = false;
 
 	esp_gatt_srvc_id_t id;
 	std::vector<std::shared_ptr<BLE::Server::Char>> chars;

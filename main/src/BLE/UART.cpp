@@ -2,6 +2,7 @@
 
 BLE::UART::UART(BLE::Server* server) : Super(), server(server), rxQueue(12){
 	service = server->addService(ServiceUID);
+	service->setPeerNeverPairs();
 
 	// Creation order is important due to char shenanigans: When any char creates a descriptor,
 	// that descriptor gets assigned to the first char created for the service. Chars with NOTIFY

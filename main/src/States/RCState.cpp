@@ -180,7 +180,7 @@ void RCState::onDriveData(DriveData driveData){
 	}
 	else if(number == 1){
 		leftSpeed = 1.0f;
-		rightSpeed = 0.05f;
+		rightSpeed = 0.2f;
 	}
 	else if(number == 2){
 		leftSpeed = 1.0f;
@@ -188,13 +188,13 @@ void RCState::onDriveData(DriveData driveData){
 	}
 	else if(number == 3){
 		leftSpeed = -1.0f;
-		rightSpeed = -0.05f;
+		rightSpeed = -0.2f;
 	}
 	else if(number == 4){
 		leftSpeed = rightSpeed = -1.0f;
 	}
 	else if(number == 5){
-		leftSpeed = -0.05f;
+		leftSpeed = -0.2f;
 		rightSpeed = -1.0f;
 	}
 	else if(number == 6){
@@ -202,12 +202,12 @@ void RCState::onDriveData(DriveData driveData){
 		rightSpeed = 1.0f;
 	}
 	else if(number == 7){
-		leftSpeed = 0.05f;
+		leftSpeed = 0.2f;
 		rightSpeed = 1.0f;
 	}
 
-	leftSpeed = std::clamp(leftSpeed * speed, -100.0f, 100.0f);
-	rightSpeed = std::clamp(rightSpeed * speed, -100.0f, 100.0f);
+	leftSpeed = std::clamp(leftSpeed * speed * 2.0f, -100.0f, 100.0f);
+	rightSpeed = std::clamp(rightSpeed * speed * 2.0f, -100.0f, 100.0f);
 
 	baseBoard->setMotors(leftSpeed, rightSpeed);
 }

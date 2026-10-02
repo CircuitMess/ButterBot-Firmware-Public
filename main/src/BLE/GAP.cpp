@@ -101,6 +101,10 @@ void BLE::GAP::ble_GAP_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* 
 		case ESP_GAP_BLE_AUTH_CMPL_EVT:{
 			if(!param->ble_security.auth_cmpl.success){
 				CMF_LOG(BLE_GAP, LogLevel::Info, "fail reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+				ConMan.onSecurityFailed(param->ble_security.auth_cmpl.bd_addr);
+				if(client){
+					client->onPairFailed(param->ble_security.auth_cmpl.bd_addr);
+				}
 				break;
 			}
 			uint64_t addr = 0;
@@ -108,8 +112,10 @@ void BLE::GAP::ble_GAP_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* 
 			addr = __builtin_bswap64(addr) >> 16;
 			CMF_LOG(BLE_GAP, LogLevel::Info, "paired, addr = %012llx", (unsigned long long) addr);
 
+			ConMan.onSecured(param->ble_security.auth_cmpl.bd_addr);
+
 			if(client){
-				client->onPairDone();
+				client->onPairDone(param->ble_security.auth_cmpl.bd_addr);
 			}
 
 			if(server){

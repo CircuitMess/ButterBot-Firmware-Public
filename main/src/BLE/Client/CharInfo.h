@@ -2,7 +2,7 @@
 
 class CharInfo {
 public:
-	CharInfo(const BLE::Client* client, uint16_t hndl);
+	CharInfo(const BLE::Client* client, uint16_t connId, const esp_bd_addr_t addr, uint16_t hndl);
 
 	void regForNotify();
 
@@ -14,6 +14,9 @@ public:
 
 private:
 	const BLE::Client* client;
+
+	const uint16_t connId;
+	esp_bd_addr_t addr;
 
 	const uint16_t hndl;
 

@@ -289,31 +289,35 @@ public:
 			return;
 		}
 
-		std::vector<size_t> toRemove;
+		// Single pass in logical order: keep non-matching elements by moving them to a write cursor,
+		// destroy matching ones. Handles duplicates and wrapped (begin > end) layouts correctly.
+		const size_t count = qSize;
+		size_t write = begin;
 
-		if(begin > end){
-			for(size_t i = 0; i <= end; ++i){
-				if(buffer[i] == value){
-					toRemove.emplace_back(i);
-				}
+		for(size_t n = 0; n < count; ++n){
+			const size_t read = (begin + n) % bufferSize;
+
+			if(buffer[read] == value){
+				buffer[read].~T();
+				--qSize;
+				continue;
 			}
 
-			for(size_t i = begin; i < bufferSize; ++i){
-				if(buffer[i] == value){
-					toRemove.emplace_back(i);
-				}
+			if(write != read){
+				new(&buffer[write]) T(std::move_if_noexcept(buffer[read]));
+				buffer[read].~T();
 			}
-		}else{
-			for(size_t i = begin; i <= end; ++i){
-				if(buffer[i] == value){
-					toRemove.emplace_back(i);
-				}
-			}
+
+			write = (write + 1) % bufferSize;
 		}
 
-		for(size_t i : toRemove){
-			removeAt(i);
+		if(empty()){
+			begin = end = 0;
+			xSemaphoreTake(waitSemaphore, 0);
+			return;
 		}
+
+		end = (write + bufferSize - 1) % bufferSize;
 	}
 
 	/**
@@ -404,96 +408,6 @@ private:
 		end = count > 0 ? count - 1 : 0;
 
 		return true;
-	}
-
-	inline void removeAt(size_t index) noexcept {
-		if(index >= bufferSize || empty()){
-			return;
-		}
-
-		if(index == begin){
-			buffer[index].~T();
-
-			--qSize;
-
-			if(!empty() || begin != end){
-				begin = (begin + 1) % bufferSize;
-			}
-
-			return;
-		}
-
-		if(index == end){
-			buffer[index].~T();
-
-			--qSize;
-
-			if(!empty() || end != begin){
-				if(end == 0){
-					end += bufferSize;
-				}
-
-				--end;
-			}
-
-			return;
-		}
-
-		if(begin > end){
-			if(index > end && index < begin){
-				return;
-			}
-
-			if(index > begin){
-				for(size_t i = begin; i <= index; ++i){
-					buffer[i + 1] = std::move_if_noexcept(buffer[i]);
-				}
-
-				buffer[begin].~T();
-
-				--qSize;
-
-				if(!empty() || begin != end){
-					begin = (begin + 1) % bufferSize;
-				}
-			}else if(index < end){
-				for(size_t i = index; i < end; ++i){
-					buffer[i] = std::move_if_noexcept(buffer[i + 1]);
-				}
-
-				buffer[end].~T();
-
-				--qSize;
-
-				if(!empty() || end != begin){
-					if(end == 0){
-						end += bufferSize;
-					}
-
-					--end;
-				}
-			}
-		}else{
-			if(index < begin && index > end){
-				return;
-			}
-
-			for(size_t i = index; i < end; ++i){
-				buffer[i] = std::move_if_noexcept(buffer[i + 1]);
-			}
-
-			buffer[end].~T();
-
-			--qSize;
-
-			if(!empty() || end != begin){
-				if(end == 0){
-					end += bufferSize;
-				}
-
-				--end;
-			}
-		}
 	}
 };
 

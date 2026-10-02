@@ -67,7 +67,7 @@ private:
 			.format_if_mount_failed = false
 	};
 
-	static constexpr uint8_t ButtonCount = 4;
+	static constexpr uint8_t ButtonCount = 6;
 };
 
 #endif //BUTTERBOT_FIRMWARE_JIGHWTEST_H

@@ -1,6 +1,8 @@
 #include "MotionService.h"
 #include <Core/Application.h>
 #include <Util/ServiceLocator.h>
+#include <algorithm>
+#include <cmath>
 
 DEFINE_LOG(MotionService)
 
@@ -111,6 +113,11 @@ void MotionService::loop() noexcept{
 	candidateStart = millis();
 	candidate = MotionType::Shake;
 	pickupDone = false;
+	uint8_t stillBatches = 0;
+	bool sawMotion = false;
+	bool haveLoopRef = false;
+	SC7A20::Sample loopRef{};
+	SC7A20::Sample streakRef{};
 
 	while(proximityLifted && processingEnabled){
 		delayMillis(FIFOFillTime);
@@ -143,6 +150,35 @@ void MotionService::loop() noexcept{
 			onMotion.broadcast(MotionType::Shake);
 		}
 
+		const float range = maxRange(fifo);
+		const SC7A20::Sample mean = meanSample(fifo);
+		if(!haveLoopRef){
+			loopRef = mean;
+			haveLoopRef = true;
+		}
+		if(range >= GrossMotionRange || maxAxisDiff(mean, loopRef) >= MeanTolerance){
+			sawMotion = true;
+		}
+
+		const float dev = stillBatches == 0 ? 0.0f : maxAxisDiff(mean, streakRef);
+		const bool still = currentPose == Pose::Straight && range < GrossMotionRange && dev <= MeanTolerance;
+		if(still){
+			if(stillBatches == 0){
+				streakRef = mean;
+			}
+			stillBatches++;
+		} else{
+			stillBatches = 0;
+		}
+
+		if(stillBatches >= StillBatchCount){
+			proximityLifted = false;
+			if(BaseBoard* baseboard = getApp()->getService<BaseBoard>()){
+				baseboard->rebaselineProximity();
+			}
+			break;
+		}
+
 		MotionType currentCandidate = MotionType::Shake;
 
 		if(currentPose == Pose::Moving || currentPose == Pose::Straight){
@@ -165,6 +201,10 @@ void MotionService::loop() noexcept{
 			//Candidate stayed the same, check for hold time
 			//Do not re-broadcast same event
 			if(lastEvent.has_value() && lastEvent.value() == candidate){
+				continue;
+			}
+
+			if(candidate == MotionType::Pickup && !sawMotion){
 				continue;
 			}
 
@@ -224,6 +264,55 @@ MotionService::Pose MotionService::detectPose(SC7A20::Sample sample){
 	}
 
 	return Pose::Moving;
+}
+
+float MotionService::maxRange(const std::vector<SC7A20::Sample>& samples){
+	if(samples.empty()){
+		return 0.0f;
+	}
+
+	float minX = samples[0].accelX;
+	float maxX = samples[0].accelX;
+	float minY = samples[0].accelY;
+	float maxY = samples[0].accelY;
+	float minZ = samples[0].accelZ;
+	float maxZ = samples[0].accelZ;
+	for(const SC7A20::Sample& sample : samples){
+		minX = std::min(minX, sample.accelX);
+		maxX = std::max(maxX, sample.accelX);
+		minY = std::min(minY, sample.accelY);
+		maxY = std::max(maxY, sample.accelY);
+		minZ = std::min(minZ, sample.accelZ);
+		maxZ = std::max(maxZ, sample.accelZ);
+	}
+
+	return std::max(maxX - minX, std::max(maxY - minY, maxZ - minZ));
+}
+
+SC7A20::Sample MotionService::meanSample(const std::vector<SC7A20::Sample>& samples){
+	SC7A20::Sample mean{};
+	if(samples.empty()){
+		return mean;
+	}
+
+	for(const SC7A20::Sample& sample : samples){
+		mean.accelX += sample.accelX;
+		mean.accelY += sample.accelY;
+		mean.accelZ += sample.accelZ;
+	}
+
+	const float n = static_cast<float>(samples.size());
+	mean.accelX /= n;
+	mean.accelY /= n;
+	mean.accelZ /= n;
+	return mean;
+}
+
+float MotionService::maxAxisDiff(const SC7A20::Sample& a, const SC7A20::Sample& b){
+	const float dx = std::fabs(a.accelX - b.accelX);
+	const float dy = std::fabs(a.accelY - b.accelY);
+	const float dz = std::fabs(a.accelZ - b.accelZ);
+	return std::max(dx, std::max(dy, dz));
 }
 
 bool MotionService::ShakeDetector::detected(){

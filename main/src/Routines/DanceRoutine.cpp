@@ -38,7 +38,6 @@ void DanceRoutine::bindEvents(){
 	sm->bindRoutine(buttonInput->OnButtonEvent, this, &DanceRoutine::onButtonEvent);
 	sm->bindRoutine(baseBoard->onProximityReading, this, &DanceRoutine::onProximityReading);
 	sm->bindRoutine(baseBoard->onProximityChange, this, &DanceRoutine::onProximityChange);
-	sm->bindRoutine(motionService->onMotion, this, &DanceRoutine::onMotion);
 }
 
 void DanceRoutine::unbindEvents(){
@@ -47,7 +46,6 @@ void DanceRoutine::unbindEvents(){
 	sm->unbindRoutine(buttonInput->OnButtonEvent);
 	sm->unbindRoutine(baseBoard->onProximityReading);
 	sm->unbindRoutine(baseBoard->onProximityChange);
-	sm->unbindRoutine(motionService->onMotion);
 }
 
 void DanceRoutine::pickRandomMove(){
@@ -284,19 +282,14 @@ void DanceRoutine::onButtonEvent(int button, ISRButtonInput::Action action){
 
 void DanceRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (bottom == ProxState::Uncovered);
+	proxUnsafe = (front == ProxState::Covered);
 }
 
 void DanceRoutine::onProximityChange(ProxSensor sensor, bool state){
-	CMF_LOG(DanceRoutine, Info, "sensor %d, state %d\n", (int)sensor, (int)state);
-	if(sensor == ProxSensor::Bottom && !state){
+	if(sensor == ProxSensor::Front && state){
+		CMF_LOG(DanceRoutine, Debug, "front obstacle");
 		interrupted = true;
 	}
-}
-
-void DanceRoutine::onMotion(MotionType type){
-	// Motion events only fire while lifted off the ground; treat any as an interruption.
-	interrupted = true;
 }
 
 void DanceRoutine::onStopPhrase(bool recognized, int index, const std::string& transcript, float confidence){

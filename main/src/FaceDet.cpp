@@ -20,8 +20,9 @@ FaceDet::~FaceDet(){
 	// stop() would wait forever for a thread that is blocked on our event group.
 	xEventGroupSetBits(threadGate, RunBit);
 	thread->stop();
-	// Clear RunBit so isStarted() returns false and unloadModel()'s guard passes.
+
 	xEventGroupClearBits(threadGate, RunBit);
+	xEventGroupSetBits(threadGate, AtGateBit);
 	unloadModel();
 	vEventGroupDelete(threadGate);
 }
@@ -34,6 +35,8 @@ void FaceDet::start(bool stopAfterDetection, bool enrollFace){
 
 	this->stopAfterDetection = stopAfterDetection;
 	enrollNextFace = enrollFace;
+
+	xEventGroupClearBits(threadGate, AtGateBit);
 	xEventGroupSetBits(threadGate, RunBit);
 }
 
@@ -47,13 +50,17 @@ bool FaceDet::isStarted() const{
 	return (xEventGroupGetBits(threadGate) & RunBit) != 0;
 }
 
+bool FaceDet::isParked() const{
+	return (xEventGroupGetBits(threadGate) & (RunBit | AtGateBit)) == AtGateBit;
+}
+
 void FaceDet::loadModel(){
 	if(human_face_detect){
 		CMF_LOG(FaceDet, LogLevel::Error, "Model already loaded!");
 		return;
 	}
 
-	if(isStarted()){
+	if(!isParked()){
 		CMF_LOG(FaceDet, LogLevel::Error, "Cannot load model while running!");
 		return;
 	}
@@ -69,7 +76,7 @@ void FaceDet::loadModel(){
 void FaceDet::unloadModel(){
 	if(!human_face_detect) return;
 
-	if(isStarted()){
+	if(!isParked()){
 		CMF_LOG(FaceDet, LogLevel::Error, "Cannot unload model while running!");
 		return;
 	}
@@ -86,7 +93,7 @@ bool FaceDet::knowsFace(){
 }
 
 bool FaceDet::forgetFace(){
-	if(isStarted()){
+	if(!isParked()){
 		CMF_LOG(FaceDet, LogLevel::Error, "Cannot forget face while FaceDet is running");
 		return false;
 	}
@@ -97,7 +104,7 @@ bool FaceDet::forgetFace(){
 }
 
 void FaceDet::learnFace(){
-	if(isStarted()){
+	if(!isParked()){
 		CMF_LOG(FaceDet, LogLevel::Error, "Cannot learn face while FaceDet is running");
 		return;
 	}

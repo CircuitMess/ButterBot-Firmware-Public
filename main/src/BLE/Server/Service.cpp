@@ -16,18 +16,24 @@ std::shared_ptr<BLE::Server::Char> BLE::Server::Service::addChar(esp_bt_uuid_t u
 	return chr;
 }
 
+void BLE::Server::Service::setPeerNeverPairs(){
+	peerNeverPairs = true;
+}
+
 void BLE::Server::Service::onPeerSubscribed(const esp_bd_addr_t peer){
-	std::lock_guard lock(peerMut);
-	// Per current design each service is single-peer (phone on NUS, controller on Com).
-	// Refuse to silently rebind subscribedPeer to a second peer — otherwise peer A's
-	// disconnect would no longer fire Service::onDisconnect, peer A's Char::notifyEn
-	// would never be cleared, and CharInfo::sendNotif would route A's notifications to B.
-	if(peerClaimed && memcmp(subscribedPeer, peer, 6) != 0){
-		CMF_LOG(BLE_Server_Service, LogLevel::Warning, "second peer attempted to claim service already claimed by another peer; ignoring");
-		return;
+	{
+		std::lock_guard lock(peerMut);
+		if(peerClaimed && memcmp(subscribedPeer, peer, 6) != 0){
+			CMF_LOG(BLE_Server_Service, LogLevel::Warning, "second peer attempted to claim service already claimed by another peer; ignoring");
+			return;
+		}
+		memcpy(subscribedPeer, peer, 6);
+		peerClaimed = true;
 	}
-	memcpy(subscribedPeer, peer, 6);
-	peerClaimed = true;
+
+	if(server != nullptr && peerNeverPairs){
+		server->onPeerClaimedUnsecured(peer);
+	}
 }
 
 void BLE::Server::Service::onPeerUnsubscribed(const esp_bd_addr_t peer){

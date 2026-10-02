@@ -13,15 +13,12 @@ public:
 	// Capacity for simultaneous links: phone (NUS) + controller (Com).
 	static constexpr size_t MaxPeers = 2;
 
-	// Thread contract: all public methods must be invoked from the BLE event task
-	// (the bluedroid BTC task that drives GAP/GATTS callbacks). The internal state
-	// (`peers`, `advertising`, `wantAdv`, `lowPow`, `conConf`) is unsynchronized and
-	// relies on this invariant. start/connect/disconnect/confDone are already wired
-	// through GAP::ble_GAP_cb / Server::onConnect / Server::onDisconnect, all on the
-	// BTC task. goLowPow / goHiPow are public and currently unused; any future caller
-	// from app context must first marshal onto the BTC task (e.g. via a queue).
 	void connect(const esp_bd_addr_t addr);
 	void disconnect(const esp_bd_addr_t addr);
+
+	void onSecured(const esp_bd_addr_t addr);
+	void onSecurityFailed(const esp_bd_addr_t addr);
+	void onPeerWillNotPair(const esp_bd_addr_t addr);
 
 	// Called once the GAP config (adv/scan-response data) is ready, to kick off advertising.
 	void start();
@@ -37,20 +34,24 @@ private:
 	struct Peer {
 		bool used = false;
 		esp_bd_addr_t addr;
+		bool confDeferred = false;
+		bool settling = false;
 	};
 	std::array<Peer, MaxPeers> peers;
 
+	struct PreSettled {
+		bool used = false;
+		esp_bd_addr_t addr;
+	};
+	std::array<PreSettled, MaxPeers> preSettled;
+
 	size_t peerCount() const;
 	Peer* findPeer(const esp_bd_addr_t addr);
+	Peer* findSettlingPeer(const esp_bd_addr_t addr, const char* what);
+	bool anySettling() const;
+	void settle(Peer& p, const char* why);
+	bool consumePreSettled(const esp_bd_addr_t addr);
 
-	// `advertising` is the host-side hint for whether the radio is currently advertising;
-	// it is *not* a faithful mirror of bluedroid's internal state. It is set on
-	// ADV_START/ADV_STOP complete events, and additionally cleared in connect() to cover
-	// bluedroid's implicit advertising stop on a connection event (which does not always
-	// surface an ADV_STOP_COMPLETE_EVT). `wantAdv` is the requested intent set by
-	// start/stopAdv. startAdv() / stopAdv() short-circuit when `advertising` already
-	// matches intent, so this hint must stay synchronized at every implicit-state-change
-	// site.
 	bool advertising = false;
 	bool wantAdv = false;
 

@@ -2,6 +2,7 @@
 #include "GAP.h"
 #include "ConMan.h"
 #include <esp_gatts_api.h>
+#include <esp_mac.h>
 #include <algorithm>
 #include <cstring>
 #include <Log/Log.h>
@@ -37,6 +38,7 @@ std::shared_ptr<BLE::Server::Service> BLE::Server::addService(esp_bt_uuid_t uuid
 	};
 
 	std::shared_ptr<Service> srv(new Service(id));
+	srv->server = this;
 	services.insert(srv);
 	return srv;
 }
@@ -73,6 +75,10 @@ void BLE::Server::removeOnDisconnectCb(BLE::Server::SubHandle handle){
 
 void BLE::Server::onPairDone(){
 	CMF_LOG(BLE_Server, LogLevel::Info, "Paired");
+}
+
+void BLE::Server::onPeerClaimedUnsecured(const esp_bd_addr_t peer){
+	ConMan.onPeerWillNotPair(peer);
 }
 
 void BLE::Server::ble_GATTS_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gatts_cb_param_t* param){
@@ -117,7 +123,7 @@ void BLE::Server::ble_GATTS_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gattc_i
 		CMF_LOG(BLE_Server, LogLevel::Info,"ESP_GATTS_MTU_EVT");
 		onMtuResp(&param->mtu);
 	}else if(event == ESP_GATTS_CONNECT_EVT){
-		CMF_LOG(BLE_Server, LogLevel::Info,"ESP_GATTS_CONNECT_EVT");
+		CMF_LOG(BLE_Server, LogLevel::Info,"ESP_GATTS_CONNECT_EVT conn %d addr " MACSTR " type %d role %d", param->connect.conn_id, MAC2STR(param->connect.remote_bda), param->connect.ble_addr_type, param->connect.link_role);
 		onConnect(&param->connect);
 	}else if(event == ESP_GATTS_DISCONNECT_EVT){
 		CMF_LOG(BLE_Server, LogLevel::Info,"ESP_GATTS_DISCONNECT_EVT");
@@ -247,9 +253,6 @@ void BLE::Server::onConnect(const esp_ble_gatts_cb_param_t::gatts_connect_evt_pa
 		connections[param->conn_id] = info;
 	}
 
-	// Client will initiate pairing, after which onPairDone() is called
-	// Here, we only set up the connection parameters
-
 	ConMan.connect(param->remote_bda);
 
 	std::vector<ConnectCB> cbs;
@@ -266,7 +269,7 @@ void BLE::Server::onConnect(const esp_ble_gatts_cb_param_t::gatts_connect_evt_pa
 }
 
 void BLE::Server::onDisconnect(const esp_ble_gatts_cb_param_t::gatts_disconnect_evt_param* param){
-	CMF_LOG(BLE_Server, LogLevel::Info,"Disconnected. Reason: 0x%x", param->reason);
+	CMF_LOG(BLE_Server, LogLevel::Info,"Disconnected. Reason: 0x%x, conn %d addr " MACSTR, param->reason, param->conn_id, MAC2STR(param->remote_bda));
 
 	// Snapshot the address before erasing so subscribers see the disconnecting peer.
 	esp_bd_addr_t peer;

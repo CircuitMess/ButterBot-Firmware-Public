@@ -44,7 +44,6 @@ Routine::TickingState MovementCommandRoutine::tick(float deltaTime){
 
 		sm->bindRoutine(baseboard->onProximityReading, this, &MovementCommandRoutine::onProximityReading);
 		sm->bindRoutine(baseboard->onProximityChange, this, &MovementCommandRoutine::onProximityChange);
-		sm->bindRoutine(motion->onMotion, this, &MovementCommandRoutine::onMotion);
 		baseboard->requestProximityState();
 		proxDeadlineMs = millis() + ProxReadingTimeoutMs;
 
@@ -63,8 +62,9 @@ Routine::TickingState MovementCommandRoutine::tick(float deltaTime){
 
 		Audio* audio = app->getService<Audio>();
 		Com* com = app->getService<Com>();
+		MotionService* motion = app->getService<MotionService>();
 
-		if(audio == nullptr || !ServiceLocator::SpeechAudioGenInstance || !ServiceLocator::SpeechGenInstance || com == nullptr || baseboard == nullptr){
+		if(audio == nullptr || !ServiceLocator::SpeechAudioGenInstance || !ServiceLocator::SpeechGenInstance || com == nullptr || baseboard == nullptr || motion == nullptr){
 			ESP_LOGE("MovementCommandRoutine", "Missing required service(s)");
 			abort();
 		}
@@ -81,6 +81,11 @@ Routine::TickingState MovementCommandRoutine::tick(float deltaTime){
 		auto source = std::make_unique<SpeechAudioSource>(SpeechGen::InputType::Text, Phrases::map(command.phrase, id));
 		audio->play(ServiceLocator::SpeechAudioGenInstance.get(), std::move(source));
 		audio->waitEnd(portMAX_DELAY);
+
+		if(!motion->isUprightOnGround()){
+			speak(Phrase::CannotMove);
+			return TickingState::Done;
+		}
 
 		baseboard->setMotors(command.leftSpeed, command.rightSpeed);
 		moveEndMs = millis() + command.duration;
@@ -125,16 +130,11 @@ void MovementCommandRoutine::speak(Phrase phrase){
 
 void MovementCommandRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	proxUnsafe = (front == ProxState::Covered);
 }
 
 void MovementCommandRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+	if(sensor == ProxSensor::Front && state){
 		proxInterrupted = true;
 	}
-}
-
-void MovementCommandRoutine::onMotion(MotionType type){
-	// Motion events only fire while lifted off the ground; treat any as an unsafe interruption.
-	proxInterrupted = true;
 }

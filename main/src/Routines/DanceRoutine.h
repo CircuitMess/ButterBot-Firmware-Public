@@ -32,7 +32,6 @@ private:
 	void onButtonEvent(int button, ISRButtonInput::Action action);
 	void onProximityReading(ProxState front, ProxState bottom);
 	void onProximityChange(ProxSensor sensor, bool state);
-	void onMotion(MotionType type);
 	void onStopPhrase(bool recognized, int index, const std::string& transcript, float confidence);
 
 	enum class Phase : uint8_t { Init, ProxCheck, Dancing, Cleanup };

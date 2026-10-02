@@ -129,6 +129,7 @@ Routine::TickingState ListNotificationsRoutine::tick(float deltaTime){
                 return TickingState::Done;
             }
 
+            // Izbacivanje duplikata - TODO: ovo je fix za Phone razred i dupliciranje, imamo task na Jiri
             notifs = phone->getNotifs();
             size_t write = 0;
             for(size_t read = 0; read < notifs.size(); ++read){

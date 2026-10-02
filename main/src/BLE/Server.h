@@ -95,6 +95,8 @@ private:
 	GAP* gap;
 	void onPairDone();
 
+	void onPeerClaimedUnsecured(const esp_bd_addr_t peer);
+
 	static constexpr int AppID = 1;
 	struct InterfaceInfo {
 		uint8_t appID = 0xff;
