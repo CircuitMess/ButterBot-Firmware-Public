@@ -16,7 +16,6 @@ DEFINE_LOG(ModuleService)
 
 /**
 * Service for managing UMAX modules (https://www.lcsc.com/datasheet/C404108.pdf)
-* that follow this pinout specification: https://docs.google.com/spreadsheets/d/1MGPnOqgmIhoZG_LD7VQy7eJBQMKvngh-zGssaOBs1kE/edit?usp=sharing
  *
  * Its job is to detect and manage instances of plugged-in modules.
  * Number of buses is set via CONFIG_CMF_MODULESERVICE_NUM_BUSES (KConfig, range 1–16, default 1).
