@@ -163,6 +163,16 @@ void BaseBoard::setProximityBotThreshold([[maybe_unused]] uint16_t threshold){
 	// ESP_ERROR_CHECK(dev->writeRegister(ProximityBottomThresh, (uint8_t*)&threshold, 2));
 }
 
+void BaseBoard::setProximityEnabled(bool front, bool bottom){
+	const bool changed = (proxFrontEnabled != front) || (proxBottomEnabled != bottom);
+	proxFrontEnabled = front;
+	proxBottomEnabled = bottom;
+	if(changed){
+		// Fresh (filtered) reading so listeners like MotionService drop a stale "lifted"/"obstacle" state
+		requestProximityState();
+	}
+}
+
 void BaseBoard::requestProximityState(){
 	ESP_ERROR_CHECK(dev->write(ProximityStateRequest));
 }
@@ -274,12 +284,21 @@ void IRAM_ATTR BaseBoard::motorBoardISR(void* arg){
 
 void BaseBoard::processEventData(const EventData& eventData){
 	switch(eventData.type){
-		case EventType::ProximityReading:
-			onProximityReading.broadcast(eventData.data.proxReading.front, eventData.data.proxReading.bot);
+		case EventType::ProximityReading:{
+			// disabled sensors report a safe state
+			const ProxState front = proxFrontEnabled ? eventData.data.proxReading.front : ProxState::Uncovered;
+			const ProxState bot = proxBottomEnabled ? eventData.data.proxReading.bot : ProxState::Covered;
+			onProximityReading.broadcast(front, bot);
 			break;
-		case EventType::ProximityThresholdReached:
-			onProximityChange.broadcast(eventData.data.proxThresholdReached.sensor, eventData.data.proxThresholdReached.inThreshold);
+		}
+		case EventType::ProximityThresholdReached:{
+			const ProxSensor sensor = eventData.data.proxThresholdReached.sensor;
+			if((sensor == ProxSensor::Front && !proxFrontEnabled) || (sensor == ProxSensor::Bottom && !proxBottomEnabled)){
+				break; // disabled sensor, drop the event
+			}
+			onProximityChange.broadcast(sensor, eventData.data.proxThresholdReached.inThreshold);
 			break;
+		}
 		case EventType::ChargeStateChanged:
 			onChargeChanged.broadcast(eventData.data.chargeStateChanged);
 			break;
