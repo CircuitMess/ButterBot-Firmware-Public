@@ -77,6 +77,8 @@ void Com::sendData(BB::State state, BB::Action::RC action, size_t size, const ui
 }
 
 void Com::sendData(BB::State state, BB::Action action, size_t size, const uint8_t* data){
+	std::lock_guard<std::mutex> guard(txMutex);
+
 	BB bbData = {
 			.state = state,
 			.action = action,
