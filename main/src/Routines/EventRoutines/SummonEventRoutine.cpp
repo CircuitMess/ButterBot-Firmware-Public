@@ -75,6 +75,9 @@ Routine::TickingState SummonEventRoutine::tick(float deltaTime){
 
 			sm->bindRoutine(baseBoard->onProximityReading, this, &SummonEventRoutine::onProximityReading);
 			sm->bindRoutine(baseBoard->onProximityChange, this, &SummonEventRoutine::onProximityChange);
+			if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+				sm->bindRoutine(motionService->onMotion, this, &SummonEventRoutine::onMotion);
+			}
 			baseBoard->requestProximityState();
 			proxDeadlineMs = millis() + ProxReadingTimeoutMs;
 			phase = Phase::ProxCheck;
@@ -218,11 +221,25 @@ void SummonEventRoutine::onDetect(int faceCount, bool known, glm::vec2 pos, glm:
 
 void SummonEventRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (front == ProxState::Covered);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	} else{
+		proxUnsafe = (front == ProxState::Covered);
+	}
 }
 
 void SummonEventRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if(sensor == ProxSensor::Front && state){
-		proxInterrupted = true;
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+			proxInterrupted = true;
+		}
+	} else{
+		if(sensor == ProxSensor::Front && state){
+			proxInterrupted = true;
+		}
 	}
+}
+
+void SummonEventRoutine::onMotion(MotionType type){
+	proxInterrupted = true;
 }

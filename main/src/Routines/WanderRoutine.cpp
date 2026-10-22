@@ -4,6 +4,7 @@
 #include <Core/Application.h>
 #include <Statics/ApplicationStatics.h>
 #include <BBData.h>
+#include <Util/ServiceLocator.h>
 #include "States/BBStateMachine.h"
 #include "Services/MotionService.h"
 #include "Services/Com.h"
@@ -117,11 +118,21 @@ void WanderRoutine::startAction(const Action& action){
 
 void WanderRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (front == ProxState::Covered);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	} else{
+		proxUnsafe = (front == ProxState::Covered);
+	}
 }
 
 void WanderRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if(sensor == ProxSensor::Front && state){
-		proxInterrupted = true;
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+			proxInterrupted = true;
+		}
+	} else{
+		if(sensor == ProxSensor::Front && state){
+			proxInterrupted = true;
+		}
 	}
 }

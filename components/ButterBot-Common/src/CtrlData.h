@@ -5,8 +5,26 @@
 
 struct Ctrl {
 	enum Command {
-		EnterRC, ExitRC, Listen, Summon, ShutUp, Poke, Drive, RCSound, Scenario
+		EnterRC, ExitRC, Listen, Summon, ShutUp, Poke, Drive, RCSound, Scenario, Settings
 	} type;
+};
+
+enum class ActivityMode : uint8_t {
+	Off, Chill, Active, Hyper
+};
+
+enum class FrontSensorMode : uint8_t {
+	Off, On
+};
+
+enum class BottomSensorMode : uint8_t {
+	Off, Reduced, On
+};
+
+struct SettingsData {
+	FrontSensorMode frontSensor;
+	BottomSensorMode bottomSensor;
+	ActivityMode activityMode;
 };
 
 struct DriveData {

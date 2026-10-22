@@ -34,6 +34,9 @@ public:
 	DECLARE_EVENT(OnScenarioEvent, Com, BB::Action::Scenario, ScenarioData);
 	OnScenarioEvent OnScenario{ this };
 
+	DECLARE_EVENT(OnSettingsEvent, Com, SettingsData);
+	OnSettingsEvent OnSettings{ this };
+
 	void sendData(BB::State state, BB::Action::Idle action);
 	void sendData(BB::State state, BB::Action::Scenario action);
 	void sendData(BB::State state, BB::Action::RC action);

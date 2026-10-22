@@ -49,6 +49,18 @@ struct FaceScenarioData : ScenarioData {
 	}
 };
 
+struct ActivityScenarioData : ScenarioData {
+	enum class Level : uint8_t {
+		None, Off, Chill, Active, Hyper
+	};
+
+	constexpr ActivityScenarioData(Level level) : ScenarioData{ (uint8_t) level }{}
+
+	constexpr Level level() const{
+		return (Level) raw;
+	}
+};
+
 static constexpr float DefaultFuzzyThreshold = 0.2f;
 
 struct ScenarioActivation {
@@ -302,6 +314,17 @@ constexpr std::array activations = std::to_array<ScenarioActivation>(
 		{ BB::Action::Scenario::Dance, {}, "get your groove on", "GfT YeR GRoV nN", "GRoV" },
 		{ BB::Action::Scenario::Dance, {}, "bust a move", "BcST c MoV", "BcST MoV" },
 		{ BB::Action::Scenario::Dance, {}, "show me what you got", "sb Mm WcT Yo GnT", "", 0.22f },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::None }, "activity mode", "aKTgVcTm MbD", "aKTgVcTm MbD" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::None }, "idle activity", "iDcL aKTgVcTm", "iDcL aKTgVcTm" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Off }, "activity off", "aKTgVcTm eF", "aKTgVcTm eF" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Chill }, "activity chill", "aKTgVcTm pgL", "aKTgVcTm pgL" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Active }, "activity active", "aKTgVcTm aKTgV", "aKTgVcTm aKTgV" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Hyper }, "activity hyper", "aKTgVcTm hiPk", "aKTgVcTm hiPk" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Chill }, "be chill", "Bm pgL", "Bm pgL" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Active }, "be active", "Bm aKTgV", "Bm aKTgV" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Hyper }, "be hyper", "Bm hiPk", "Bm hiPk" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Chill }, "calm down", "KnM DtN", "KnM DtN" },
+		{ BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Hyper }, "go crazy", "Gb KRdZm", "KRdZm" },
 	}
 );
 

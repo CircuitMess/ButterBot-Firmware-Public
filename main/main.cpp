@@ -280,6 +280,7 @@ protected:
 
 		com->OnConnStatus.bind(this, &Butterbot::onConnStatus);
 		com->OnCommand.bind(this, &Butterbot::onCommand);
+		com->OnSettings.bind(this, &Butterbot::onSettings);
 
 		server->start();
 
@@ -338,6 +339,10 @@ private:
 	uint64_t lastPress;
 	StrongObjectPtr<Timer> forceOffTimer;
 	inline static bool muted = false;
+
+	static constexpr Phrase ActivityModePhrases[] = { Phrase::SettingsActivityOff, Phrase::SettingsActivityChill, Phrase::SettingsActivityActive, Phrase::SettingsActivityHyper };
+	static constexpr Phrase FrontSensorModePhrases[] = { Phrase::SettingsFrontSensorOff, Phrase::SettingsFrontSensorOn };
+	static constexpr Phrase BottomSensorModePhrases[] = { Phrase::SettingsBottomSensorOff, Phrase::SettingsBottomSensorReduced, Phrase::SettingsBottomSensorOn };
 
 	static constexpr const char* UnmuteSounds[] = {
 		"/spiffs/listen/lasers1/phaseJump1.aac",
@@ -408,6 +413,89 @@ private:
 		}
 
 		toggleMute();
+	}
+
+	void onSettings(const SettingsData& data){
+		if(!ServiceLocator::SettingsInstance){
+			return;
+		}
+
+		SettingsStruct settings = ServiceLocator::SettingsInstance->get();
+		const bool frontChanged = settings.frontSensor != data.frontSensor;
+		const bool bottomChanged = settings.bottomSensor != data.bottomSensor;
+		const bool activityChanged = settings.activityMode != data.activityMode;
+		if(!frontChanged && !bottomChanged && !activityChanged){
+			return;
+		}
+
+		settings.frontSensor = data.frontSensor;
+		settings.bottomSensor = data.bottomSensor;
+		settings.activityMode = data.activityMode;
+		ServiceLocator::SettingsInstance->set(settings);
+		ServiceLocator::SettingsInstance->store();
+
+		if(frontChanged || bottomChanged){
+			if(BaseBoard* baseBoard = getService<BaseBoard>()){
+				baseBoard->requestProximityState();
+			}
+		}
+
+		Audio* audio = getService<Audio>();
+		Com* com = getService<Com>();
+		BBStateMachine* sm = getService<BBStateMachine>();
+		if(audio == nullptr || com == nullptr || sm == nullptr){
+			return;
+		}
+
+		if(sm->getActiveRoutine() != nullptr || audio->isPlaying()){
+			return;
+		}
+
+		const size_t frontIndex = static_cast<size_t>(data.frontSensor);
+		const size_t bottomIndex = static_cast<size_t>(data.bottomSensor);
+		const size_t activityIndex = static_cast<size_t>(data.activityMode);
+		bool spoken = false;
+
+		if(frontChanged && frontIndex < std::size(FrontSensorModePhrases)){
+			speakSettingsChange(audio, com, FrontSensorModePhrases[frontIndex]);
+			spoken = true;
+		}
+
+		if(bottomChanged && bottomIndex < std::size(BottomSensorModePhrases)){
+			speakSettingsChange(audio, com, BottomSensorModePhrases[bottomIndex]);
+			spoken = true;
+		}
+
+		if(activityChanged && activityIndex < std::size(ActivityModePhrases)){
+			speakSettingsChange(audio, com, ActivityModePhrases[activityIndex]);
+			spoken = true;
+		}
+
+		if(spoken){
+			com->sendData(BB::State::Idle, BB::Action::Idle::None);
+		}
+	}
+
+	static void speakSettingsChange(Audio* audio, Com* com, Phrase phrase){
+		if(!ServiceLocator::SpeechAudioGenInstance || !ServiceLocator::SpeechGenInstance){
+			return;
+		}
+
+		const int16_t id = Phrases::get(phrase);
+		if(id < 0){
+			return;
+		}
+
+		com->sendData(BB::State::Idle, BB::Action::Idle::SettingsChange, SettingsChangeData{ .phrase = phrase, .id = static_cast<uint8_t>(id) });
+
+		const std::string text = Phrases::map(phrase, id);
+		if(text.empty()){
+			return;
+		}
+
+		std::unique_ptr<SpeechAudioSource> source = std::make_unique<SpeechAudioSource>(SpeechGen::InputType::Text, text);
+		audio->play(ServiceLocator::SpeechAudioGenInstance.get(), std::move(source));
+		audio->waitEnd(portMAX_DELAY);
 	}
 
 	void toggleMute(){

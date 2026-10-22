@@ -25,17 +25,19 @@ private:
 		uint8_t weight; // The higher the weight, the more likely the routine will be chosen randomly. If 0, routine will never be chosen.
 	};
 
-	static const std::vector<RandomRoutineDef> RandomRoutines;
+	static const std::vector<RandomRoutineDef> AnyPowerRandomRoutines;
+	static const std::vector<RandomRoutineDef> UnpluggedRandomRoutines;
 	static const std::array<EventRoutineFactory, static_cast<uint8_t>(EventBag::EventType::COUNT)> EventRoutines;
 
-	// Random delay works in a [MinRandomDelay, MaxRandomDelay> range
-	static constexpr TickType_t MinRandomDelay = 5 * 60000;
-	static constexpr TickType_t MaxRandomDelay = 20 * 60000;
+	static constexpr TickType_t MinuteMs = 60000;
 
 private:
 	EventBag* eventBag = nullptr;
 	uint64_t lastBtnPressTime;
 	uint64_t nextRandomRoutineTime;
+	ActivityMode activityMode = ActivityMode::Active;
+	TickType_t minRandomDelay = 1 * MinuteMs;
+	TickType_t maxRandomDelay = 5 * MinuteMs;
 	Com* com = nullptr;
 	Routine::TickingState lastTickingState = Routine::TickingState::None;
 	bool buttonHeld = false;
@@ -48,8 +50,10 @@ private:
 private:
 	void onCommand(Ctrl::Command cmd);
 	void onRCData(const RCData& data);
+	void onSettings(const SettingsData& data);
 	void onButtonEvent(int button, ISRButtonInput::Action action);
 	void onMotion(MotionType type);
+	void applyActivityMode(ActivityMode mode);
 
 	// tick() helpers. All run on the StateMachine thread, serialized with onButtonEvent.
 	bool shouldYieldToEvent(bool eventPending) const;

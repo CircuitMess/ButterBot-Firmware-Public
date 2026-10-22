@@ -144,6 +144,20 @@ void Com::tick(float deltaTime) noexcept{
 		return;
 	}
 
+	if(command == Ctrl::Settings){
+		if(buf.size() < sizeof(Ctrl::Command) + sizeof(SettingsData)){
+			CMF_LOG(Com, LogLevel::Warning, "Dropping Settings command with truncated payload (%zu bytes)", buf.size());
+			return;
+		}
+
+		SettingsData settingsData{};
+		memcpy(&settingsData, buf.data() + sizeof(Ctrl::Command), sizeof(SettingsData));
+
+		OnSettings.broadcast(settingsData);
+
+		return;
+	}
+
 	if(command == Ctrl::EnterRC){
 		if(buf.size() < sizeof(Ctrl::Command) + sizeof(RCData)){
 			CMF_LOG(Com, LogLevel::Warning, "Dropping EnterRC command with truncated payload (%zu bytes)", buf.size());

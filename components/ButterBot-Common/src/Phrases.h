@@ -174,6 +174,16 @@ enum class Phrase : uint16_t {
     MotorBoardFailure,
     ShuttingDown,
 	ListenAbort,
+	SettingsFrontSensorOff,
+	SettingsFrontSensorOn,
+	SettingsBottomSensorOff,
+	SettingsBottomSensorReduced,
+	SettingsBottomSensorOn,
+	SettingsActivityOff,
+	SettingsActivityChill,
+	SettingsActivityActive,
+	SettingsActivityHyper,
+	SettingsAskActivity,
     // Add phrases here
     COUNT
 };

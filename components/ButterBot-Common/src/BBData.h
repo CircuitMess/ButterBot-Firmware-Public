@@ -8,6 +8,7 @@
 #include <vector>
 #include "Phrases.h"
 #include "Serialization.h"
+#include "CtrlData.h"
 
 static constexpr const char* ControllerIP = "11.0.0.1";
 static constexpr const char* ButterbotIP = "11.0.0.2";
@@ -22,7 +23,7 @@ struct BB {
 		enum class Idle {
 			None, Wander, Ramble, Person, Poke, Summon, Fall, UpsideDown, PickUp, Shake, ModuleChange, Gas, Intruder,
 			BatteryLow, Charging, ChargingFull, PhoneNotif, PhoneConnect, Observe, GasConfigureStart, GasConfigureEnd,
-			BatteryLevel, ShutUp, CantMove
+			BatteryLevel, ShutUp, CantMove, SettingsChange, SettingsSync
 		} idle;
 
 		enum class Scenario {
@@ -43,6 +44,7 @@ struct BB {
 			PhonePlayMusic,
 			PhoneStopMusic,
 			WhatsThis,
+			SettingsActivity,
 		} scenario;
 
 		enum class Listen {
@@ -400,6 +402,17 @@ struct CantMoveData : BBData {
 	enum class Reason : uint8_t {
 		Charging, Unstable
 	} reason;
+};
+
+struct SettingsChangeData : BBData {
+	Phrase phrase;
+	uint8_t id;
+};
+
+struct SettingsSyncData : BBData {
+	FrontSensorMode frontSensor;
+	BottomSensorMode bottomSensor;
+	ActivityMode activityMode;
 };
 
 #endif //BUTTERBOT_COMMON_ACTIONDATA_H

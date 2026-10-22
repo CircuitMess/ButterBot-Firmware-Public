@@ -150,33 +150,37 @@ void MotionService::loop() noexcept{
 			onMotion.broadcast(MotionType::Shake);
 		}
 
-		const float range = maxRange(fifo);
-		const SC7A20::Sample mean = meanSample(fifo);
-		if(!haveLoopRef){
-			loopRef = mean;
-			haveLoopRef = true;
-		}
-		if(range >= GrossMotionRange || maxAxisDiff(mean, loopRef) >= MeanTolerance){
-			sawMotion = true;
-		}
+		const bool bottomSensorOn = ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On;
 
-		const float dev = stillBatches == 0 ? 0.0f : maxAxisDiff(mean, streakRef);
-		const bool still = currentPose == Pose::Straight && range < GrossMotionRange && dev <= MeanTolerance;
-		if(still){
-			if(stillBatches == 0){
-				streakRef = mean;
+		if(!bottomSensorOn){
+			const float range = maxRange(fifo);
+			const SC7A20::Sample mean = meanSample(fifo);
+			if(!haveLoopRef){
+				loopRef = mean;
+				haveLoopRef = true;
 			}
-			stillBatches++;
-		} else{
-			stillBatches = 0;
-		}
+			if(range >= GrossMotionRange || maxAxisDiff(mean, loopRef) >= MeanTolerance){
+				sawMotion = true;
+			}
 
-		if(stillBatches >= StillBatchCount){
-			proximityLifted = false;
-			if(BaseBoard* baseboard = getApp()->getService<BaseBoard>()){
-				baseboard->rebaselineProximity();
+			const float dev = stillBatches == 0 ? 0.0f : maxAxisDiff(mean, streakRef);
+			const bool still = currentPose == Pose::Straight && range < GrossMotionRange && dev <= MeanTolerance;
+			if(still){
+				if(stillBatches == 0){
+					streakRef = mean;
+				}
+				stillBatches++;
+			} else{
+				stillBatches = 0;
 			}
-			break;
+
+			if(stillBatches >= StillBatchCount){
+				proximityLifted = false;
+				if(BaseBoard* baseboard = getApp()->getService<BaseBoard>()){
+					baseboard->rebaselineProximity();
+				}
+				break;
+			}
 		}
 
 		MotionType currentCandidate = MotionType::Shake;
@@ -204,7 +208,7 @@ void MotionService::loop() noexcept{
 				continue;
 			}
 
-			if(candidate == MotionType::Pickup && !sawMotion){
+			if(!bottomSensorOn && candidate == MotionType::Pickup && !sawMotion){
 				continue;
 			}
 

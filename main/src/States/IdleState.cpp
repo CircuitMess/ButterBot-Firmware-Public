@@ -26,9 +26,12 @@
 
 DEFINE_LOG(IdleState)
 
-const std::vector<IdleState::RandomRoutineDef> IdleState::RandomRoutines = {
+const std::vector<IdleState::RandomRoutineDef> IdleState::AnyPowerRandomRoutines = {
 	{ &makeRoutine<RambleRoutine>, 3 },
 	{ &makeRoutine<ObserveRoutine>, 1 },
+};
+
+const std::vector<IdleState::RandomRoutineDef> IdleState::UnpluggedRandomRoutines = {
 	{ &makeRoutine<WanderRoutine>, 2 },
 	{ &makeRoutine<PersonRoutine>, 1 },
 };
@@ -49,7 +52,15 @@ const std::array<EventRoutineFactory, static_cast<uint8_t>(EventBag::EventType::
 };
 
 IdleState::IdleState(BBStateMachine* sm) : State(sm){
-	nextRandomRoutineTime = millis() + MinRandomDelay;
+	if(ServiceLocator::SettingsInstance){
+		applyActivityMode(ServiceLocator::SettingsInstance->get().activityMode);
+	}
+
+	if(activityMode == ActivityMode::Off){
+		nextRandomRoutineTime = UINT64_MAX;
+	} else{
+		nextRandomRoutineTime = millis() + minRandomDelay;
+	}
 
 	const Application* app = ApplicationStatics::getApplication();
 	eventBag = app->getService<EventBag>();
@@ -74,6 +85,7 @@ IdleState::IdleState(BBStateMachine* sm) : State(sm){
 
 	sm->bindState(com->OnCommand, this, &IdleState::onCommand);
 	sm->bindState(com->OnRCData, this, &IdleState::onRCData);
+	sm->bindState(com->OnSettings, this, &IdleState::onSettings);
 
 	auto motionService = app->getService<MotionService>();
 	if(motionService == nullptr){
@@ -203,13 +215,17 @@ void IdleState::startScenario(const EventBag::EventData& data){
 }
 
 void IdleState::maybeStartRandomRoutine(){
-	if(RandomRoutines.empty()){
+	if(AnyPowerRandomRoutines.empty() && UnpluggedRandomRoutines.empty()){
 		rescheduleRandomRoutine();
 		return;
 	}
 
 	// While the button is held, suppress new random routines so none start before the transition to ListenState commits on release.
 	if(buttonHeld){
+		return;
+	}
+
+	if(activityMode == ActivityMode::Off){
 		return;
 	}
 
@@ -226,15 +242,41 @@ void IdleState::maybeStartRandomRoutine(){
 }
 
 RoutineFactory IdleState::pickRandomRoutine() const{
+	bool unplugged = true;
+	if(BaseBoard* baseBoard = ApplicationStatics::getApplication()->getService<BaseBoard>()){
+		unplugged = baseBoard->getChargingState() == ChargingState::Unplugged;
+	}
+
 	size_t weightSum = 0;
-	for(const RandomRoutineDef& routineDef : RandomRoutines){
+	for(const RandomRoutineDef& routineDef : AnyPowerRandomRoutines){
 		weightSum += routineDef.weight;
+	}
+	if(unplugged){
+		for(const RandomRoutineDef& routineDef : UnpluggedRandomRoutines){
+			weightSum += routineDef.weight;
+		}
 	}
 
 	const size_t random = rand() % (weightSum + 1);
 
 	size_t sum = 0;
-	for(const RandomRoutineDef& routineDef : RandomRoutines){
+	for(const RandomRoutineDef& routineDef : AnyPowerRandomRoutines){
+		if(routineDef.weight == 0){
+			continue;
+		}
+
+		sum += routineDef.weight;
+
+		if(random <= sum){
+			return routineDef.routine;
+		}
+	}
+
+	if(!unplugged){
+		return nullptr;
+	}
+
+	for(const RandomRoutineDef& routineDef : UnpluggedRandomRoutines){
 		if(routineDef.weight == 0){
 			continue;
 		}
@@ -250,7 +292,46 @@ RoutineFactory IdleState::pickRandomRoutine() const{
 }
 
 void IdleState::rescheduleRandomRoutine(){
-	nextRandomRoutineTime = millis() + (rand() % (MaxRandomDelay - MinRandomDelay) + MinRandomDelay);
+	if(activityMode == ActivityMode::Off){
+		nextRandomRoutineTime = UINT64_MAX;
+		return;
+	}
+
+	nextRandomRoutineTime = millis() + (rand() % (maxRandomDelay - minRandomDelay) + minRandomDelay);
+}
+
+void IdleState::applyActivityMode(ActivityMode mode){
+	activityMode = mode;
+
+	switch(mode){
+		case ActivityMode::Off:
+			minRandomDelay = 0;
+			maxRandomDelay = 0;
+			break;
+		case ActivityMode::Chill:
+			minRandomDelay = 5 * MinuteMs;
+			maxRandomDelay = 10 * MinuteMs;
+			break;
+		case ActivityMode::Hyper:
+			minRandomDelay = MinuteMs / 4;
+			maxRandomDelay = 1 * MinuteMs;
+			break;
+		case ActivityMode::Active:
+		default:
+			activityMode = ActivityMode::Active;
+			minRandomDelay = 1 * MinuteMs;
+			maxRandomDelay = 5 * MinuteMs;
+			break;
+	}
+}
+
+void IdleState::onSettings(const SettingsData& data){
+	if(data.activityMode == activityMode){
+		return;
+	}
+
+	applyActivityMode(data.activityMode);
+	rescheduleRandomRoutine();
 }
 
 int64_t IdleState::getDynamicTickInterval() const{
@@ -272,6 +353,10 @@ int64_t IdleState::getDynamicTickInterval() const{
 		if(lastTickingState == Routine::TickingState::Block){
 			return portMAX_DELAY;
 		}
+	}
+
+	if(activityMode == ActivityMode::Off){
+		return portMAX_DELAY;
 	}
 
 	if(millis() >= nextRandomRoutineTime){

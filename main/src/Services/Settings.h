@@ -3,6 +3,7 @@
 
 #include <nvs.h>
 #include <BBData.h>
+#include <CtrlData.h>
 
 struct SettingsStruct {
 	using Scale = TempHumScale;
@@ -12,6 +13,9 @@ struct SettingsStruct {
 	float ledStrobePeriod = 0.4f;
 	float ledBreathePeriod = 2.0f;
 	bool gasModuleConfigured = false;
+	FrontSensorMode frontSensor = FrontSensorMode::On;
+	BottomSensorMode bottomSensor = BottomSensorMode::Reduced;
+	ActivityMode activityMode = ActivityMode::Active;
 };
 
 class Settings {

@@ -40,6 +40,7 @@
 #include "Routines/ForgetFaceRoutine.h"
 #include "Routines/PowerOffRoutine.h"
 #include "Routines/DanceRoutine.h"
+#include "Routines/SettingsActivityRoutine.h"
 
 namespace {
 	struct ScenarioRoutineMapping {
@@ -98,6 +99,11 @@ namespace {
 		{ { BB::Action::Scenario::FaceDetect, FaceScenarioData{ FaceScenarioData::Phase::Remember } }, &makeRoutine<RememberFaceRoutine> },
 		{ { BB::Action::Scenario::FaceDetectForget, FaceScenarioData{ FaceScenarioData::Phase::Forget } }, &makeRoutine<ForgetFaceRoutine> },
 		{ { BB::Action::Scenario::Dance, {} }, &makeRoutine<DanceRoutine> },
+		{ { BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::None } }, &makeRoutine<SettingsActivityRoutine> },
+		{ { BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Off } }, &makeRoutine<SettingsActivityOffRoutine> },
+		{ { BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Chill } }, &makeRoutine<SettingsActivityChillRoutine> },
+		{ { BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Active } }, &makeRoutine<SettingsActivityActiveRoutine> },
+		{ { BB::Action::Scenario::SettingsActivity, ActivityScenarioData{ ActivityScenarioData::Level::Hyper } }, &makeRoutine<SettingsActivityHyperRoutine> },
 	};
 }
 

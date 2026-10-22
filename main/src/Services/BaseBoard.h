@@ -186,6 +186,12 @@ private:
 	};
 
 	void processEventData(const EventData& eventData);
+	void processProximityReading(ProxState front, ProxState bot);
+	void processProximityChange(ProxSensor sensor, bool inThreshold);
+
+	bool isFrontSensorOff() const;
+	bool isBottomSensorOff() const;
+	bool isBottomSensorOn() const;
 };
 
 

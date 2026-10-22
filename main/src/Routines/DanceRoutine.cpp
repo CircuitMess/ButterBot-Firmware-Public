@@ -38,6 +38,9 @@ void DanceRoutine::bindEvents(){
 	sm->bindRoutine(buttonInput->OnButtonEvent, this, &DanceRoutine::onButtonEvent);
 	sm->bindRoutine(baseBoard->onProximityReading, this, &DanceRoutine::onProximityReading);
 	sm->bindRoutine(baseBoard->onProximityChange, this, &DanceRoutine::onProximityChange);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		sm->bindRoutine(motionService->onMotion, this, &DanceRoutine::onMotion);
+	}
 }
 
 void DanceRoutine::unbindEvents(){
@@ -46,6 +49,7 @@ void DanceRoutine::unbindEvents(){
 	sm->unbindRoutine(buttonInput->OnButtonEvent);
 	sm->unbindRoutine(baseBoard->onProximityReading);
 	sm->unbindRoutine(baseBoard->onProximityChange);
+	sm->unbindRoutine(motionService->onMotion);
 }
 
 void DanceRoutine::pickRandomMove(){
@@ -282,14 +286,28 @@ void DanceRoutine::onButtonEvent(int button, ISRButtonInput::Action action){
 
 void DanceRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (front == ProxState::Covered);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	} else{
+		proxUnsafe = (front == ProxState::Covered);
+	}
 }
 
 void DanceRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if(sensor == ProxSensor::Front && state){
-		CMF_LOG(DanceRoutine, Debug, "front obstacle");
-		interrupted = true;
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+			interrupted = true;
+		}
+	} else{
+		if(sensor == ProxSensor::Front && state){
+			CMF_LOG(DanceRoutine, Debug, "front obstacle");
+			interrupted = true;
+		}
 	}
+}
+
+void DanceRoutine::onMotion(MotionType type){
+	interrupted = true;
 }
 
 void DanceRoutine::onStopPhrase(bool recognized, int index, const std::string& transcript, float confidence){

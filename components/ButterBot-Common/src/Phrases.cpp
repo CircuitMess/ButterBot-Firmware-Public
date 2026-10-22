@@ -1259,6 +1259,52 @@ public:
 		{ "Got it", 0.0f, false },
 	});
 
+	static constexpr std::array SettingsFrontSensorOffPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Front proximity sensor off", 0.0f, false },
+		{ "Obstacle detection off", 0.0f, false },
+	});
+
+	static constexpr std::array SettingsFrontSensorOnPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Front proximity sensor on", 0.0f, false },
+		{ "Obstacle detection on", 0.0f, false },
+	});
+
+	static constexpr std::array SettingsBottomSensorOffPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Bottom proximity sensor off", 0.0f, false },
+		{ "Ground detection off", 0.0f, false },
+	});
+
+	static constexpr std::array SettingsBottomSensorReducedPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Bottom proximity sensor reduced", 0.0f, false },
+		{ "Ground detection reduced", 0.0f, false },
+	});
+
+	static constexpr std::array SettingsBottomSensorOnPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Bottom proximity sensor on", 0.0f, false },
+		{ "Ground detection on", 0.0f, false },
+	});
+
+	static constexpr std::array SettingsActivityOffPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Idle, activity off", 0.0f, false, "Idle activity off" },
+	});
+
+	static constexpr std::array SettingsActivityChillPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Idle, activity chill", 0.0f, false, "Idle activity chill" },
+	});
+
+	static constexpr std::array SettingsActivityActivePhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Idle, activity active", 0.0f, false, "Idle activity active" },
+	});
+
+	static constexpr std::array SettingsActivityHyperPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Idle, activity hyper", 0.0f, false, "Idle activity hyper" },
+	});
+
+	static constexpr std::array SettingsAskActivityPhrases = std::to_array<Phrases::PhraseOutput>({
+		{ "Which activity level? Off, chill, active, or hyper", 0.0f, false },
+	});
+
+
     // Lookup table indexed directly by the (dense, gap-free) Phrase enum value.
     // Built entirely at compile time (constexpr) so it is constant-initialized into .rodata (flash/DROM on ESP32)
     // and is NEVER constructed or copied into RAM at startup. Unmapped entries (e.g. None) stay as empty spans.
@@ -1428,6 +1474,16 @@ public:
         m[static_cast<size_t>(Phrase::MotorBoardFailure)] = MotorBoardFailurePhrases;
         m[static_cast<size_t>(Phrase::ShuttingDown)] = ShuttingDownPhrases;
         m[static_cast<size_t>(Phrase::ListenAbort)] = ListenAbortPhrases;
+        m[static_cast<size_t>(Phrase::SettingsFrontSensorOff)] = SettingsFrontSensorOffPhrases;
+        m[static_cast<size_t>(Phrase::SettingsFrontSensorOn)] = SettingsFrontSensorOnPhrases;
+        m[static_cast<size_t>(Phrase::SettingsBottomSensorOff)] = SettingsBottomSensorOffPhrases;
+        m[static_cast<size_t>(Phrase::SettingsBottomSensorReduced)] = SettingsBottomSensorReducedPhrases;
+        m[static_cast<size_t>(Phrase::SettingsBottomSensorOn)] = SettingsBottomSensorOnPhrases;
+        m[static_cast<size_t>(Phrase::SettingsActivityOff)] = SettingsActivityOffPhrases;
+        m[static_cast<size_t>(Phrase::SettingsActivityChill)] = SettingsActivityChillPhrases;
+        m[static_cast<size_t>(Phrase::SettingsActivityActive)] = SettingsActivityActivePhrases;
+        m[static_cast<size_t>(Phrase::SettingsActivityHyper)] = SettingsActivityHyperPhrases;
+        m[static_cast<size_t>(Phrase::SettingsAskActivity)] = SettingsAskActivityPhrases;
 
         return m;
     }

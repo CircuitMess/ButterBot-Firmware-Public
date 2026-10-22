@@ -30,6 +30,7 @@ protected:
 private:
 	void onProximityReading(ProxState front, ProxState bottom);
 	void onProximityChange(ProxSensor sensor, bool state);
+	void onMotion(MotionType type);
 	void speak(Phrase phrase);
 
 	enum class Phase : uint8_t { Init, ProxCheck, Moving };

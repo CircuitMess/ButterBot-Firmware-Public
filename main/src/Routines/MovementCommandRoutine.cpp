@@ -44,6 +44,9 @@ Routine::TickingState MovementCommandRoutine::tick(float deltaTime){
 
 		sm->bindRoutine(baseboard->onProximityReading, this, &MovementCommandRoutine::onProximityReading);
 		sm->bindRoutine(baseboard->onProximityChange, this, &MovementCommandRoutine::onProximityChange);
+		if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+			sm->bindRoutine(motion->onMotion, this, &MovementCommandRoutine::onMotion);
+		}
 		baseboard->requestProximityState();
 		proxDeadlineMs = millis() + ProxReadingTimeoutMs;
 
@@ -82,7 +85,8 @@ Routine::TickingState MovementCommandRoutine::tick(float deltaTime){
 		audio->play(ServiceLocator::SpeechAudioGenInstance.get(), std::move(source));
 		audio->waitEnd(portMAX_DELAY);
 
-		if(!motion->isUprightOnGround()){
+		const bool bottomSensorOn = ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On;
+		if(!bottomSensorOn && !motion->isUprightOnGround()){
 			speak(Phrase::CannotMove);
 			return TickingState::Done;
 		}
@@ -130,11 +134,25 @@ void MovementCommandRoutine::speak(Phrase phrase){
 
 void MovementCommandRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (front == ProxState::Covered);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	} else{
+		proxUnsafe = (front == ProxState::Covered);
+	}
 }
 
 void MovementCommandRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if(sensor == ProxSensor::Front && state){
-		proxInterrupted = true;
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+			proxInterrupted = true;
+		}
+	} else{
+		if(sensor == ProxSensor::Front && state){
+			proxInterrupted = true;
+		}
 	}
+}
+
+void MovementCommandRoutine::onMotion(MotionType type){
+	proxInterrupted = true;
 }

@@ -212,11 +212,21 @@ void PersonRoutine::onDetect(int faceCount, bool known, glm::vec2 pos, glm::vec2
 
 void PersonRoutine::onProximityReading(ProxState front, ProxState bottom){
 	proxReadingReceived = true;
-	proxUnsafe = (front == ProxState::Covered);
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		proxUnsafe = (bottom == ProxState::Uncovered) || (front == ProxState::Covered);
+	} else{
+		proxUnsafe = (front == ProxState::Covered);
+	}
 }
 
 void PersonRoutine::onProximityChange(ProxSensor sensor, bool state){
-	if(sensor == ProxSensor::Front && state){
-		proxInterrupted = true;
+	if(ServiceLocator::SettingsInstance && ServiceLocator::SettingsInstance->get().bottomSensor == BottomSensorMode::On){
+		if((sensor == ProxSensor::Bottom && !state) || (sensor == ProxSensor::Front && state)){
+			proxInterrupted = true;
+		}
+	} else{
+		if(sensor == ProxSensor::Front && state){
+			proxInterrupted = true;
+		}
 	}
 }

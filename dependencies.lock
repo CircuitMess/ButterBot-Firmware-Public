@@ -1,6 +1,6 @@
 dependencies:
   LIS2DW12:
-    component_hash: fab8d690a6f1a5b109756225508a50dfe1f684efc2bd4f3d350480a2c3c8945b
+    component_hash: 10ef2732242524292adb799f2043adb99ab45883f622a2624a882176c0118c26
     dependencies: []
     source:
       git: https://github.com/CircuitMess/lis2dw12-pid.git
@@ -18,7 +18,7 @@ dependencies:
       type: service
     version: 1.7.19~2
   espressif/dl_fft:
-    component_hash: a955ca29581de2177ddf25759273bd83f082b3c805e735fe6ee105858643989b
+    component_hash: 965be7152132b365061abf5fc5fc7b85e525f73b94a204cdda61cfe9572c0d77
     dependencies:
     - name: idf
       require: private
@@ -26,7 +26,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 0.6.0
+    version: 0.8.0
   espressif/esp-dl:
     component_hash: 996c9d5ae81ebbb38d3e70314cccdae6e2ae0908842fad3512cff60db734635c
     dependencies:
@@ -164,7 +164,7 @@ dependencies:
       type: service
     version: 0.2.3~2
   heatshrink:
-    component_hash: 9d43ee0e54233c4438a42ac4e90438e007e259c9e094345353caf930ab33d756
+    component_hash: ce88e39839b89668362184ba017e2e927bedade642e0667c2c9e1a2044bb4825
     dependencies:
     - name: idf
       version: '>=5'
