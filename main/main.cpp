@@ -168,7 +168,7 @@ protected:
 		I2S* i2s_out = registerPeriphery<I2S>(I2S_NUM_1, HardwareConfiguration::getAudioI2SConfig());
 
 		Audio* audio = registerService<Audio>(i2s_out, OutputPin{tcaOutput, EXP_SD_MODE_PIN}, /*internalStack=*/true);
-		audio->setGain(0.8f);
+		audio->setGain(DefaultGain);
 
 		ServiceLocator::SpeechGenInstance = std::make_unique<SpeechGen>();
 		ServiceLocator::SpeechAudioGenInstance = std::make_unique<SpeechAudioGen>();
@@ -339,6 +339,7 @@ private:
 	uint64_t lastPress;
 	StrongObjectPtr<Timer> forceOffTimer;
 	inline static bool muted = false;
+	static constexpr float DefaultGain = 0.8f; // used at boot and when unmuting
 
 	static constexpr Phrase ActivityModePhrases[] = { Phrase::SettingsActivityOff, Phrase::SettingsActivityChill, Phrase::SettingsActivityActive, Phrase::SettingsActivityHyper };
 	static constexpr Phrase FrontSensorModePhrases[] = { Phrase::SettingsFrontSensorOff, Phrase::SettingsFrontSensorOn };
@@ -501,7 +502,7 @@ private:
 	void toggleMute(){
 		if(Audio* audio = getService<Audio>()){
 			muted = !muted;
-			audio->setGain(muted ? 0.f : 1.f);
+			audio->setGain(muted ? 0.f : DefaultGain);
 			sendMuteStatus();
 
 			if(!muted){
