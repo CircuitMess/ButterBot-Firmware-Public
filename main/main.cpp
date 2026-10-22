@@ -335,8 +335,8 @@ protected:
 private:
 	static constexpr uint64_t ShutdownButtonPressTime = 3000;
 	static constexpr uint32_t ForcePowerOffTime = 10000;
-	bool pressed;
-	uint64_t lastPress;
+	bool pressed = false;
+	uint64_t lastPress = 0;
 	StrongObjectPtr<Timer> forceOffTimer;
 	inline static bool muted = false;
 
